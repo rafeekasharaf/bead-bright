@@ -15,7 +15,9 @@ node tests/pwa-assets.cjs
 exists on disk, that both `index.html` (landing) and `practice.html` (the
 tool) are precached, and that the navigate handler looks up the requested
 page rather than always serving a hard-coded one — a static check, not a
-running Service Worker.
+running Service Worker. It also runs the landing page's installed-app redirect
+with stubbed display modes: installed apps go to `practice.html`, browser
+visitors stay on the landing page.
 
 `tests/interactive.cjs` uses the same Linkedom harness as `tests/ui.cjs` and covers
 the one-at-a-time practice view, the progress indicator, and the decorative
