@@ -10,7 +10,7 @@
 | sheet-improvements | Mobile-default one-at-a-time, sound on by default, results panel | Done |
 | F01 | Question controls and saved presets | Not shipped — branch deleted before merge |
 | F04 | Local child profiles | Done |
-| F05 + F06 | Per-profile practice history and resume | Done (one known bug, see below) |
+| F05 + F06 | Per-profile practice history and resume | Done |
 
 ## U00 — Practice technique guide
 
@@ -453,7 +453,32 @@ The owner's existing production profile was backed up before testing and restore
 
 ### Known issues
 
-- **History button shows for Guest.** The button is marked hidden with no active profile, but the `.profile-chip` style (`display:inline-flex`) overrides the browser's default hiding, so it is always visible. Tapping it as Guest opens an empty "No practice sessions yet" list. No data is affected. Simulated tests do not apply CSS, so they did not catch it. Likely fix: a one-line `#history-btn[hidden]{display:none}` rule.
+- ~~**History button shows for Guest.**~~ **Fixed 2026-09-27 in `70ce15a`** (see below). The button was marked hidden with no active profile, but the `.profile-chip` style (`display:inline-flex`) overrode the browser's default hiding, so it was always visible. Tapping it as Guest opened an empty "No practice sessions yet" list. No data was affected. Simulated tests do not apply CSS, so they did not catch it.
+
+### Fix: History button hidden for Guest
+
+**Commit:** `70ce15a` — Hide the History button for Guest. Fast-forwarded onto `main` from `77b7ae3` at the owner's request ("fix the bug and deploy it").
+
+**Deployment:**
+
+- Production: https://bead-bright.vercel.app/practice.html
+- Vercel deployment: https://bead-bright-hfletituu-rafeekasharafs-projects.vercel.app
+- Preview checked first: https://bead-bright-fbrsghl2q-rafeekasharafs-projects.vercel.app
+
+**What changed:** added `.profile-chip[hidden]{display:none}` to `practice.html`, so any hidden chip-style button is actually hidden. Service worker cache bumped to `bead-bright-v11-history-button-fix` so visitors with v10 get the fix.
+
+**Test results:** every test in `tests/README.md` passes on `70ce15a`. `tests/history.cjs` adds a check that the button is hidden for Guest and that the `[hidden]` rule is present; it fails against the old CSS.
+
+**Browser checks (Chrome):**
+
+| Check | Preview | Production |
+| --- | --- | --- |
+| Guest: History button `display: none`, 0px wide | Pass | Pass (hidden flag set temporarily; storage not touched) |
+| Profile active: History button shown (98px) | Pass | Pass |
+| Back to Guest hides it again | Pass | — |
+| `/sw.js` serves `bead-bright-v11-history-button-fix`; v10 replaced after one reload | — | Pass |
+| `/tests/` returns 404 | — | Pass |
+| Production `practice.html`, `sw.js` identical to `70ce15a` | — | Pass |
 
 ### Untested — spot-check manually
 
