@@ -146,6 +146,25 @@ $('results-continue').dispatchEvent(new window.Event('click'));
 assert.equal($('focus-results').hidden,true);
 assert.equal($('focus-results-btn').hidden,false);
 assert.equal(focusedId,'a-1','Keep practicing must return focus to the current question');
+
+// New practice in the results box starts a fresh sheet with the same settings,
+// stays in one-at-a-time view, and puts the cursor in the first answer.
+$('focus-results-btn').dispatchEvent(new window.Event('click'));
+assert.equal($('results-new').textContent,'New practice');
+assert.equal($('focus-results').contains($('results-new')),true,'the button lives in the results box');
+const finishedSheet=$('questions').innerHTML;
+$('results-new').dispatchEvent(new window.Event('click'));
+assert.equal($('focus-results').hidden,true,'the results box closes');
+assert.equal($('focus-results-btn').hidden,true,'a fresh sheet has no results yet');
+assert.notEqual($('questions').innerHTML,finishedSheet,'a fresh sheet is built');
+assert.equal($('questions').children.length,3,'same number of questions as before');
+assert.equal($('a-0').value,'','answers are cleared');
+assert.equal($('questions').classList.contains('is-focused'),true,'stays in one-at-a-time view');
+assert.equal($('questions').classList.contains('showing-results'),false);
+assert.equal($('questions').children[0].classList.contains('is-current'),true,'back to question 1');
+assert.equal($('focus-nav').hidden,false);
+assert.equal($('summary').textContent,'');
+assert.equal(focusedId,'a-0','the cursor goes to the first answer');
 if($('questions').classList.contains('is-focused'))$('view-toggle').dispatchEvent(new window.Event('click'));
 
-console.log('Interactive checks passed: progress indicator, mini abacus render and sizing, one-at-a-time navigation, digit-length rebuild, view reset on new sheet, visible checked cards, card stays visible while typing in focus view, sound defaults on, finish results panel and chip navigation.');
+console.log('Interactive checks passed: progress indicator, mini abacus render and sizing, one-at-a-time navigation, digit-length rebuild, view reset on new sheet, visible checked cards, card stays visible while typing in focus view, sound defaults on, finish results panel, chip navigation and New practice from the results box.');

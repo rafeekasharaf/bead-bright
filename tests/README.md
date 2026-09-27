@@ -75,7 +75,8 @@ with stubbed display modes: installed apps go to `practice.html`, browser
 visitors stay on the landing page.
 
 `tests/interactive.cjs` uses the same Linkedom harness as `tests/ui.cjs` and covers
-the one-at-a-time practice view, the progress indicator, and the decorative
+the one-at-a-time practice view, the results box (including its New practice
+button), the progress indicator, and the decorative
 mini-abacus render/rebuild — it does not simulate real animation, sound, or
 Web Audio playback.
 

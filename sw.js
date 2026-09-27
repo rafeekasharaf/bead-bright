@@ -1,4 +1,4 @@
-const CACHE = 'bead-bright-v13-profile-pins';
+const CACHE = 'bead-bright-v14-results-new-practice';
 const ASSETS = ['/', '/index.html', '/practice.html', '/app.js', '/techniques.js', '/pwa.js', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-512.png', '/apple-touch-icon.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));

@@ -183,6 +183,12 @@ $('results-grid')?.addEventListener('click',e=>{
   hideResultsPanel();goToQuestion(Number(b.dataset.i));
 });
 $('results-continue')?.addEventListener('click',()=>{hideResultsPanel();const input=$(`a-${focusIndex}`);if(input)input.focus();});
+// A fresh sheet with the same settings; the finished one stays in the child's history.
+$('results-new')?.addEventListener('click',()=>{
+  hideResultsPanel();
+  try{generate();}catch(err){$('error').textContent=err.message;$('error').hidden=false;return;}
+  const input=$('a-0');if(input)input.focus();
+});
 $('focus-results-btn')?.addEventListener('click',showResultsPanel);
 $('view-toggle')?.addEventListener('click',()=>{
   viewMode=viewMode==='sheet'?'focus':'sheet';
