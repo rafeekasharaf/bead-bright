@@ -196,6 +196,151 @@ function randomInt(min,max){return min+Math.floor(Math.random()*(max-min+1));}
 function makeQuestion(digits,rows,mode,level){return AbacusTechniques.makeQuestion(digits,rows,mode,level);}
 function generate(){const rows=Number($('rows').value),count=Number($('count').value),mode=$('mode').value,level=$('level').value;if(!Number.isInteger(rows)||rows<2||rows>100||!Number.isInteger(count)||count<1||count>30)throw Error("Let's choose 2–100 rows and 1–30 questions, then we'll build your sheet.");questions=Array.from({length:count},()=>makeQuestion(digit,rows,mode,level));sheetLevel=level;revealed=false;$('reveal').textContent='Show answers';$('summary').textContent='';$('error').hidden=true;$('meta').textContent=`${AbacusTechniques.levels[level].name} · ${digit}-digit numbers · ${rows} rows · ${mode==='add'?'Addition':'Addition & subtraction'}`;$('questions').innerHTML=questions.map((q,i)=>`<article class="card" id="card-${i}" style="animation-delay:${Math.min(i,10)*45}ms"><h3>QUESTION ${String(i+1).padStart(2,'0')}</h3><div class="numbers">${q.values.map((v,j)=>`<div class="number"><span class="sign">${j===0?'':v<0?'−':'+'}</span><span>${Math.abs(v)}</span></div>`).join('')}</div><div class="answer"><label for="a-${i}">Answer for question ${i+1}</label><input id="a-${i}" inputmode="numeric" autocomplete="off" placeholder="?" aria-describedby="f-${i}"><p class="feedback" id="f-${i}"></p></div></article>`).join('');focusIndex=0;hasResults=false;buildAbacusBase(abacusSize());updateAbacusBeads(0);updateProgress();applyView();}
 $('digits').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;digit=Number(b.dataset.digit);for(const item of $('digits').children)item.setAttribute('aria-pressed',String(item===b));buildAbacusBase(abacusSize());updateAbacusBeads(0);});
+
+// --- local child profiles ---
+const PROFILES_KEY='bead-bright-profiles-v1';
+const ACTIVE_PROFILE_KEY='bead-bright-active-profile-v1';
+const MAX_PROFILES=8;
+let editingProfileId=null, pendingDeleteId=null, selectedAvatar=null;
+function loadProfiles(){try{const raw=localStorage.getItem(PROFILES_KEY),list=raw?JSON.parse(raw):[];return Array.isArray(list)?list:[];}catch(e){return [];}}
+function saveProfiles(list){try{localStorage.setItem(PROFILES_KEY,JSON.stringify(list));}catch(e){}}
+function getActiveProfileId(){try{return localStorage.getItem(ACTIVE_PROFILE_KEY);}catch(e){return null;}}
+function setActiveProfileId(id){try{if(id)localStorage.setItem(ACTIVE_PROFILE_KEY,id);else localStorage.removeItem(ACTIVE_PROFILE_KEY);}catch(e){}}
+function refreshProfileBar(){
+  const avatarEl=$('profile-bar-avatar'),nameEl=$('profile-bar-name');
+  if(!avatarEl||!nameEl)return;
+  const activeId=getActiveProfileId();
+  const profile=activeId?loadProfiles().find(p=>p.id===activeId):null;
+  if(profile){avatarEl.textContent=profile.avatar;nameEl.textContent=profile.name;}
+  else{avatarEl.textContent='🙂';nameEl.textContent='Practicing as Guest';}
+}
+function showProfileError(msg){const el=$('profile-error');if(!el)return;el.textContent=msg;el.hidden=false;}
+function setSelectedAvatar(avatar){
+  selectedAvatar=avatar;
+  const picker=$('avatar-picker');if(!picker)return;
+  for(const b of picker.children)b.setAttribute('aria-pressed',String(b.dataset.avatar===avatar));
+}
+function resetProfileForm(){
+  editingProfileId=null;
+  if($('profile-name-input'))$('profile-name-input').value='';
+  setSelectedAvatar(null);
+  if($('profile-save-btn'))$('profile-save-btn').textContent='Add profile';
+  if($('profile-cancel-edit'))$('profile-cancel-edit').hidden=true;
+  if($('profile-error'))$('profile-error').hidden=true;
+}
+function startEditProfile(id){
+  const p=loadProfiles().find(x=>x.id===id);if(!p)return;
+  editingProfileId=id;
+  $('profile-name-input').value=p.name;
+  setSelectedAvatar(p.avatar);
+  $('profile-save-btn').textContent='Save changes';
+  $('profile-cancel-edit').hidden=false;
+  $('profile-error').hidden=true;
+}
+function refreshProfilesList(){
+  const list=$('profiles-list');if(!list)return;
+  list.textContent='';
+  const profiles=loadProfiles(),activeId=getActiveProfileId();
+  for(const p of profiles){
+    const row=document.createElement('div');
+    row.className='profile-row'+(p.id===activeId?' is-active':'');
+    row.dataset.id=p.id;
+
+    const selectBtn=document.createElement('button');
+    selectBtn.type='button';selectBtn.className='profile-row-select';
+    selectBtn.setAttribute('aria-label',`Switch to ${p.name}`);
+    const avatarSpan=document.createElement('span');avatarSpan.className='avatar';avatarSpan.textContent=p.avatar;avatarSpan.setAttribute('aria-hidden','true');
+    const nameSpan=document.createElement('span');nameSpan.className='name';nameSpan.textContent=p.name;
+    selectBtn.append(avatarSpan,nameSpan);
+    if(p.id===activeId){
+      const tag=document.createElement('span');tag.className='profile-row-active-tag';tag.textContent='Active';
+      selectBtn.append(tag);
+    }
+    row.appendChild(selectBtn);
+
+    const editBtn=document.createElement('button');
+    editBtn.type='button';editBtn.className='profile-row-edit';editBtn.textContent='✏️';
+    editBtn.setAttribute('aria-label',`Edit ${p.name}`);
+    row.appendChild(editBtn);
+
+    const confirming=pendingDeleteId===p.id;
+    const deleteBtn=document.createElement('button');
+    deleteBtn.type='button';
+    deleteBtn.className='profile-row-delete'+(confirming?' confirming':'');
+    deleteBtn.textContent=confirming?'Confirm delete':'🗑️';
+    deleteBtn.setAttribute('aria-label',confirming?`Confirm deleting ${p.name}`:`Delete ${p.name}`);
+    row.appendChild(deleteBtn);
+
+    list.appendChild(row);
+  }
+}
+$('avatar-picker')?.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  setSelectedAvatar(b.dataset.avatar);
+});
+$('profile-save-btn')?.addEventListener('click',()=>{
+  const name=$('profile-name-input').value.trim();
+  if(!name){showProfileError('Type a nickname first.');return;}
+  if(!selectedAvatar){showProfileError('Pick an avatar first.');return;}
+  const list=loadProfiles();
+  if(editingProfileId){
+    const p=list.find(x=>x.id===editingProfileId);
+    if(p){p.name=name;p.avatar=selectedAvatar;saveProfiles(list);}
+    resetProfileForm();
+  }else{
+    if(list.length>=MAX_PROFILES){showProfileError(`You can have up to ${MAX_PROFILES} profiles. Delete one to add another.`);return;}
+    const profile={id:'pr'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),name,avatar:selectedAvatar};
+    list.push(profile);
+    saveProfiles(list);
+    setActiveProfileId(profile.id);
+    resetProfileForm();
+  }
+  refreshProfileBar();refreshProfilesList();
+});
+$('profile-cancel-edit')?.addEventListener('click',resetProfileForm);
+$('profiles-list')?.addEventListener('click',e=>{
+  const row=e.target.closest('.profile-row');if(!row)return;
+  const id=row.dataset.id;
+  if(e.target.closest('.profile-row-select')){
+    pendingDeleteId=null;
+    setActiveProfileId(id);
+    refreshProfileBar();refreshProfilesList();
+    try{$('profiles-dialog').close();}catch(err){}
+    return;
+  }
+  if(e.target.closest('.profile-row-edit')){
+    pendingDeleteId=null;
+    startEditProfile(id);
+    refreshProfilesList();
+    return;
+  }
+  if(e.target.closest('.profile-row-delete')){
+    if(pendingDeleteId===id){
+      saveProfiles(loadProfiles().filter(p=>p.id!==id));
+      if(getActiveProfileId()===id)setActiveProfileId(null);
+      if(editingProfileId===id)resetProfileForm();
+      pendingDeleteId=null;
+      refreshProfileBar();refreshProfilesList();
+    }else{
+      pendingDeleteId=id;
+      refreshProfilesList();
+    }
+    return;
+  }
+});
+$('profile-none-btn')?.addEventListener('click',()=>{
+  pendingDeleteId=null;
+  setActiveProfileId(null);
+  refreshProfileBar();refreshProfilesList();
+  try{$('profiles-dialog').close();}catch(err){}
+});
+$('profile-bar-btn')?.addEventListener('click',()=>{
+  resetProfileForm();
+  pendingDeleteId=null;
+  refreshProfilesList();
+  try{$('profiles-dialog').showModal();}catch(err){}
+});
+refreshProfileBar();
 function updateLevelHelp(){
   const technique=AbacusTechniques.levels[$('level').value];
   $('level-help').textContent=technique.help;

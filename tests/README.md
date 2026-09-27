@@ -10,7 +10,18 @@ node tests/techniques.cjs
 node tests/interactive.cjs
 node tests/pwa-assets.cjs
 node tests/mobile-default-view.cjs
+node tests/profiles.cjs
 ```
+
+`tests/profiles.cjs` uses the same Linkedom harness as `tests/ui.cjs`, plus an
+in-memory `localStorage` stub and a minimal `showModal`/`close` stub for the
+one `<dialog>` element it uses (Linkedom has no native `<dialog>` behavior).
+It covers the guest-by-default state, adding a profile requiring both a name
+and an avatar, a new profile becoming active immediately, persistence across
+a simulated reload, switching and "practice without a profile" leaving every
+saved profile untouched, editing a profile in place (with cancel discarding
+changes), and the two-tap delete confirmation only ever removing the one
+profile it targets.
 
 `tests/mobile-default-view.cjs` stubs `window.matchMedia` to prove the
 one-at-a-time view is the default under a 650px-wide screen and the
