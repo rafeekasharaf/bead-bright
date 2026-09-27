@@ -13,6 +13,7 @@
 | F05 + F06 | Per-profile practice history and resume | Done |
 | profile-pins release | Delete history, child PINs with grown-up PIN, New practice in results box | Done |
 | F03 | Timed practice (count up, countdown, pause/resume) | Done |
+| F08 | Retry mistakes | Done |
 
 ## U00 — Practice technique guide
 
@@ -629,3 +630,59 @@ The owner's production browser data was backed up inside the browser before test
 - A countdown can be paused at any time, so it is not a strict test.
 - The Timing choice returns to Off after a reload; only resumed sessions restore their timing.
 - Real phone, screen reader announcement of the 1-minute note, and an installed home-screen app are untested.
+
+## F08 — Retry mistakes
+
+**Status:** Done (2026-09-27)
+
+**Approval scope:** Preview and production. Claude checked the final preview (https://bead-bright-2hf1bdg86-rafeekasharafs-projects.vercel.app) in Chrome with a real tap before merging.
+
+**Commits** (fast-forwarded onto `main` from `8f44391`):
+
+- `3b1d173` — F08: retry mistakes (from `0010-F08-retry-mistakes.patch`).
+- `3123936` — Leave the "Number of questions" setting alone. Building a retry sheet had set it to the number missed, so the next New practice was just as short; the patch's own test asserted that behaviour and was corrected.
+
+**Deployment:**
+
+- Production: https://bead-bright.vercel.app/practice.html
+- Vercel deployment: https://bead-bright-79qdglm72-rafeekasharafs-projects.vercel.app
+
+### What changed
+
+- Once a sheet is finished (every question answered, or the countdown ran out) with anything wrong or blank, a **"Retry the N you missed"** button appears, in the worksheet view and in the one-at-a-time results box.
+- Retrying builds a sheet from exactly those questions (same numbers), answers cleared and editable; the child's settings are unchanged.
+- With a profile, a touched retry sheet is saved as its own session, tagged with the session it retries, and shown in History as "↩ Retry · …". Retrying also works from a finished session opened read-only from History.
+- No retry button after a fully correct sheet.
+- Service worker cache `bead-bright-v17-retry-mistakes`; adds `tests/retry.cjs`.
+
+### Test results
+
+Ran every test in `tests/README.md` on Node v22.11.0 (Windows), on `3123936` before merging — all pass:
+
+| Check | Result |
+| --- | --- |
+| `node --check app.js` / `techniques.js` / `sw.js` / `pwa.js` | Pass |
+| `node tests/techniques.cjs` | Pass — 3,520 question sequences |
+| `node tests/interactive.cjs`, `pwa-assets.cjs`, `mobile-default-view.cjs`, `profiles.cjs`, `history.cjs`, `pins.cjs`, `timing.cjs`, `ui.cjs` | Pass |
+| `node tests/retry.cjs` (new; settings-unchanged and results-box checks added, confirmed failing against the unfixed code) | Pass |
+
+Browser checks (Chrome):
+
+| Check | Preview | Production |
+| --- | --- | --- |
+| Finish with 2 wrong: "Retry the 2 you missed" appears | Pass | Pass |
+| Real tap on retry: 2-question sheet with the exact same numbers, answers cleared and editable | Pass | Pass |
+| "Number of questions" unchanged after retry; next New practice is full size | Pass | Pass (setting unchanged) |
+| Fully correct sheet: no retry button | — | Pass |
+| Finished session reopened from History (read-only): retry offered, same questions, editable | — | Pass |
+| The new retry session shows "↩ Retry · …" in History | — | Pass |
+| `/sw.js` serves `bead-bright-v17-retry-mistakes` | — | Pass |
+| `/tests/` and `/tests/retry.cjs` return 404 | — | Pass |
+| Production `practice.html`, `app.js`, `sw.js` identical to `3123936` | — | Pass |
+
+The owner's production browser data (profiles, history, grown-up PIN) was backed up inside the browser before testing and restored exactly afterwards; the test profile and sessions were removed.
+
+### Notes and untested
+
+- Opening any session from History restores that session's settings, including its question count, so resuming a 2-question retry session sets "Number of questions" to 2. This is existing History behaviour for all sessions and was left unchanged.
+- Real phone and screen readers are untested.
