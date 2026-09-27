@@ -86,4 +86,46 @@ $('a-0').dispatchEvent(new window.Event('input',{bubbles:true}));
 assert.equal($('questions').children[0].classList.contains('is-current'),true,'current card must stay visible while typing, before Next/Check');
 if($('questions').classList.contains('is-focused'))$('view-toggle').dispatchEvent(new window.Event('click')); // back to worksheet view for any later tests
 
-console.log('Interactive checks passed: progress indicator, mini abacus render and sizing, one-at-a-time navigation, digit-length rebuild, view reset on new sheet, visible checked cards, card stays visible while typing in focus view.');
+// Sound is on by default when no preference has been saved.
+assert.equal($('sound-toggle').getAttribute('aria-pressed'),'true','sound must default to on');
+
+// Finishing a sheet in one-at-a-time view shows a results panel with correct
+// counts and lets you jump straight to a specific question from it.
+$('digits').children[0].dispatchEvent(new window.Event('click',{bubbles:true}));
+$('rows').value='5';$('count').value='3';
+submit();
+if(!$('questions').classList.contains('is-focused'))$('view-toggle').dispatchEvent(new window.Event('click'));
+// Answer q0 correctly, q1 wrong, leave q2 blank, then walk to the end and finish.
+const correctTotal=i=>{
+  const nums=Array.from($(`card-${i}`).querySelectorAll('.numbers .number')).map(n=>{
+    const sign=n.querySelector('.sign').textContent;
+    return (sign==='−'?-1:1)*Number(n.lastElementChild.textContent);
+  });
+  return nums.reduce((a,b)=>a+b,0);
+};
+$('a-0').value=String(correctTotal(0));
+$('a-0').dispatchEvent(new window.Event('input',{bubbles:true}));
+$('focus-next').dispatchEvent(new window.Event('click'));
+$('a-1').value=String(correctTotal(1)+1); // deliberately wrong
+$('a-1').dispatchEvent(new window.Event('input',{bubbles:true}));
+$('focus-next').dispatchEvent(new window.Event('click'));
+// question 3 (index 2) left blank
+assert.equal($('focus-next').classList.contains('is-finish'),true,'last question\'s Next button must switch to the Finish style');
+assert.equal($('focus-next').querySelector('.nav-icon').textContent,'','Finish must not show an icon');
+$('focus-next').dispatchEvent(new window.Event('click')); // Finish
+assert.equal($('focus-results').hidden,false,'finishing must show the results panel');
+assert.match($('results-summary').textContent,/1 correct/);
+assert.match($('results-summary').textContent,/1 to fix/);
+assert.match($('results-summary').textContent,/1 blank/);
+const chips=Array.from($('results-grid').children);
+assert.equal(chips.length,3);
+assert.equal(chips[0].classList.contains('correct'),true);
+assert.equal(chips[1].classList.contains('wrong'),true);
+assert.equal(chips[2].classList.contains('blank'),true);
+// Clicking a chip jumps straight to that question and closes the results panel.
+chips[1].dispatchEvent(new window.Event('click',{bubbles:true}));
+assert.equal($('focus-results').hidden,true);
+assert.equal($('questions').children[1].classList.contains('is-current'),true);
+if($('questions').classList.contains('is-focused'))$('view-toggle').dispatchEvent(new window.Event('click'));
+
+console.log('Interactive checks passed: progress indicator, mini abacus render and sizing, one-at-a-time navigation, digit-length rebuild, view reset on new sheet, visible checked cards, card stays visible while typing in focus view, sound defaults on, finish results panel and chip navigation.');

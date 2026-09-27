@@ -9,7 +9,13 @@ node --check sw.js
 node tests/techniques.cjs
 node tests/interactive.cjs
 node tests/pwa-assets.cjs
+node tests/mobile-default-view.cjs
 ```
+
+`tests/mobile-default-view.cjs` stubs `window.matchMedia` to prove the
+one-at-a-time view is the default under a 650px-wide screen and the
+worksheet view is the default above it, and that the view-toggle button's
+label matches whichever view is active on load.
 
 `tests/pwa-assets.cjs` checks that every path `sw.js` precaches actually
 exists on disk, that both `index.html` (landing) and `practice.html` (the

@@ -2,8 +2,8 @@
 let digit=1, questions=[], revealed=false, sheetLevel="free";
 const $=id=>document.getElementById(id);
 const SOUND_KEY='bead-bright-sound-on';
-let soundOn=false, audioCtx=null;
-try{soundOn=localStorage.getItem(SOUND_KEY)==='1';}catch{}
+let soundOn=true, audioCtx=null;
+try{const savedSound=localStorage.getItem(SOUND_KEY);if(savedSound!==null)soundOn=savedSound==='1';}catch{}
 function setSoundButton(){const b=$('sound-toggle');if(!b)return;b.textContent=soundOn?'🔊':'🔇';b.setAttribute('aria-pressed',String(soundOn));b.setAttribute('aria-label',soundOn?'Turn practice sounds off':'Turn practice sounds on');}
 setSoundButton();
 $('sound-toggle')?.addEventListener('click',()=>{soundOn=!soundOn;try{localStorage.setItem(SOUND_KEY,soundOn?'1':'0');}catch{}setSoundButton();if(soundOn)playTone([[440,0.08]]);});
@@ -28,16 +28,18 @@ function playTone(notes,peak){
 function celebrate(){
   try{if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;}catch(e){}
   try{
-    const anchor=$('actions')||document.body;
     const colors=['#ffd166','#7cd6c0','#f2a6c9','#a3c4ff','#2655df'];
-    for(let i=0;i<24;i++){
+    const flowers=['🌸','🌼','🌺'];
+    for(let i=0;i<30;i++){
       const p=document.createElement('div');
-      p.className='confetti-piece';
-      p.style.left=Math.random()*100+'%';
-      p.style.background=colors[i%colors.length];
-      p.style.animationDuration=(1.1+Math.random()*0.8)+'s';
-      p.style.animationDelay=(Math.random()*0.25)+'s';
-      anchor.appendChild(p);
+      const isFlower=i%3===0;
+      p.className='confetti-piece'+(isFlower?' flower':'');
+      p.style.left=Math.random()*100+'vw';
+      if(isFlower)p.textContent=flowers[i%flowers.length];
+      else p.style.background=colors[i%colors.length];
+      p.style.animationDuration=(1.8+Math.random()*1.2)+'s';
+      p.style.animationDelay=(Math.random()*0.35)+'s';
+      document.body.appendChild(p);
       p.addEventListener('animationend',()=>p.remove());
     }
   }catch(e){}
@@ -103,40 +105,93 @@ function updateAbacusBeads(raw){
 
 // --- worksheet / one-at-a-time view ---
 let viewMode='sheet', focusIndex=0;
+try{if(window.matchMedia('(max-width:650px)').matches)viewMode='focus';}catch(e){}
+let hasResults=false;
+function syncViewToggleButton(){
+  const b=$('view-toggle');if(!b)return;
+  b.setAttribute('aria-pressed',String(viewMode==='focus'));
+  b.textContent=viewMode==='focus'?'📄 Worksheet view':'🧮 One at a time';
+}
 function applyView(){
   try{
-    const q=$('questions'),nav=$('focus-nav');if(!q||!nav)return;
+    const q=$('questions'),nav=$('focus-nav'),resultsBtn=$('focus-results-btn');
+    syncViewToggleButton();
+    if(!q||!nav)return;
     const total=questions.length;
     if(viewMode==='focus'&&total>0){
       q.classList.add('is-focused');nav.hidden=false;
+      if(resultsBtn)resultsBtn.hidden=!hasResults;
       if(focusIndex>=total)focusIndex=total-1;
       if(focusIndex<0)focusIndex=0;
       Array.from(q.children).forEach((card,i)=>card.classList.toggle('is-current',i===focusIndex));
       $('focus-position').textContent=`Question ${focusIndex+1} of ${total}`;
       $('focus-prev').disabled=focusIndex===0;
       const isLast=focusIndex===total-1,nextBtn=$('focus-next');
-      nextBtn.querySelector('.nav-icon').textContent=isLast?'✔':'▶';
+      nextBtn.classList.toggle('is-finish',isLast);
+      nextBtn.querySelector('.nav-icon').textContent=isLast?'':'▶';
       nextBtn.querySelector('.nav-label').textContent=isLast?'Finish':'Next';
     } else {
-      q.classList.remove('is-focused');nav.hidden=true;
+      q.classList.remove('is-focused','showing-results');nav.hidden=true;
+      if(resultsBtn)resultsBtn.hidden=true;
+      const results=$('focus-results');if(results)results.hidden=true;
     }
   }catch(e){}
 }
-function goToQuestion(i){focusIndex=i;applyView();const input=$(`a-${i}`);if(input)input.focus();}
+function goToQuestion(i){
+  focusIndex=i;applyView();
+  const card=$(`card-${i}`);if(card)retrigger(card,'q-enter');
+  const input=$(`a-${i}`);if(input)input.focus();
+}
+function showResultsPanel(){
+  try{
+    if(viewMode!=='focus')return;
+    const total=questions.length;
+    let correct=0,wrong=0,blank=0;
+    const states=questions.map((q,i)=>{
+      const el=$(`a-${i}`),val=el?el.value.trim():'';
+      const ok=/^\d+$/.test(val)&&Number(val)===q.total;
+      const state=!val?'blank':ok?'correct':'wrong';
+      if(state==='correct')correct++;else if(state==='wrong')wrong++;else blank++;
+      return state;
+    });
+    $('results-summary').textContent=(wrong===0&&blank===0)
+      ?`All ${total} correct! 🎉`
+      :`${correct} correct · ${wrong} to fix${blank?` · ${blank} blank`:''}`;
+    $('results-grid').innerHTML=states.map((s,i)=>
+      `<button type="button" class="result-chip ${s}" data-i="${i}" aria-label="Question ${i+1}: ${s==='correct'?'correct':s==='wrong'?'needs another look':'not answered yet'}">${i+1}</button>`
+    ).join('');
+    hasResults=true;
+    $('questions').classList.add('showing-results');
+    $('focus-nav').hidden=true;
+    $('focus-results').hidden=false;
+    $('focus-results-btn').hidden=false;
+  }catch(e){}
+}
+function hideResultsPanel(){
+  try{
+    $('focus-results').hidden=true;
+    $('questions').classList.remove('showing-results');
+    applyView();
+  }catch(e){}
+}
+$('results-grid')?.addEventListener('click',e=>{
+  const b=e.target.closest('.result-chip');if(!b)return;
+  hideResultsPanel();goToQuestion(Number(b.dataset.i));
+});
+$('results-continue')?.addEventListener('click',hideResultsPanel);
+$('focus-results-btn')?.addEventListener('click',showResultsPanel);
 $('view-toggle')?.addEventListener('click',()=>{
   viewMode=viewMode==='sheet'?'focus':'sheet';
-  $('view-toggle').setAttribute('aria-pressed',String(viewMode==='focus'));
-  $('view-toggle').textContent=viewMode==='focus'?'📄 Worksheet view':'🧮 One at a time';
   focusIndex=0;applyView();
 });
 $('focus-prev')?.addEventListener('click',()=>{if(focusIndex>0)goToQuestion(focusIndex-1);});
 $('focus-next')?.addEventListener('click',()=>{
   if(focusIndex<questions.length-1)goToQuestion(focusIndex+1);
-  else{check();try{$('summary').scrollIntoView({behavior:'smooth',block:'nearest'});}catch(e){}}
+  else check();
 });
 function randomInt(min,max){return min+Math.floor(Math.random()*(max-min+1));}
 function makeQuestion(digits,rows,mode,level){return AbacusTechniques.makeQuestion(digits,rows,mode,level);}
-function generate(){const rows=Number($('rows').value),count=Number($('count').value),mode=$('mode').value,level=$('level').value;if(!Number.isInteger(rows)||rows<2||rows>100||!Number.isInteger(count)||count<1||count>30)throw Error("Let's choose 2–100 rows and 1–30 questions, then we'll build your sheet.");questions=Array.from({length:count},()=>makeQuestion(digit,rows,mode,level));sheetLevel=level;revealed=false;$('reveal').textContent='Show answers';$('summary').textContent='';$('error').hidden=true;$('meta').textContent=`${AbacusTechniques.levels[level].name} · ${digit}-digit numbers · ${rows} rows · ${mode==='add'?'Addition':'Addition & subtraction'}`;$('questions').innerHTML=questions.map((q,i)=>`<article class="card" id="card-${i}" style="animation-delay:${Math.min(i,10)*45}ms"><h3>QUESTION ${String(i+1).padStart(2,'0')}</h3><div class="numbers">${q.values.map((v,j)=>`<div class="number"><span class="sign">${j===0?'':v<0?'−':'+'}</span><span>${Math.abs(v)}</span></div>`).join('')}</div><div class="answer"><label for="a-${i}">Answer for question ${i+1}</label><input id="a-${i}" inputmode="numeric" autocomplete="off" placeholder="?" aria-describedby="f-${i}"><p class="feedback" id="f-${i}"></p></div></article>`).join('');focusIndex=0;buildAbacusBase(abacusSize());updateAbacusBeads(0);updateProgress();applyView();}
+function generate(){const rows=Number($('rows').value),count=Number($('count').value),mode=$('mode').value,level=$('level').value;if(!Number.isInteger(rows)||rows<2||rows>100||!Number.isInteger(count)||count<1||count>30)throw Error("Let's choose 2–100 rows and 1–30 questions, then we'll build your sheet.");questions=Array.from({length:count},()=>makeQuestion(digit,rows,mode,level));sheetLevel=level;revealed=false;$('reveal').textContent='Show answers';$('summary').textContent='';$('error').hidden=true;$('meta').textContent=`${AbacusTechniques.levels[level].name} · ${digit}-digit numbers · ${rows} rows · ${mode==='add'?'Addition':'Addition & subtraction'}`;$('questions').innerHTML=questions.map((q,i)=>`<article class="card" id="card-${i}" style="animation-delay:${Math.min(i,10)*45}ms"><h3>QUESTION ${String(i+1).padStart(2,'0')}</h3><div class="numbers">${q.values.map((v,j)=>`<div class="number"><span class="sign">${j===0?'':v<0?'−':'+'}</span><span>${Math.abs(v)}</span></div>`).join('')}</div><div class="answer"><label for="a-${i}">Answer for question ${i+1}</label><input id="a-${i}" inputmode="numeric" autocomplete="off" placeholder="?" aria-describedby="f-${i}"><p class="feedback" id="f-${i}"></p></div></article>`).join('');focusIndex=0;hasResults=false;buildAbacusBase(abacusSize());updateAbacusBeads(0);updateProgress();applyView();}
 $('digits').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;digit=Number(b.dataset.digit);for(const item of $('digits').children)item.setAttribute('aria-pressed',String(item===b));buildAbacusBase(abacusSize());updateAbacusBeads(0);});
 function updateLevelHelp(){
   const technique=AbacusTechniques.levels[$('level').value];
@@ -156,7 +211,7 @@ $('level').addEventListener('change',()=>{
 });
 updateLevelHelp();
 $('settings').addEventListener('submit',e=>{e.preventDefault();try{generate();}catch(err){$('error').textContent=err.message;$('error').hidden=false;}});
-function check(){let correct=0,answered=0;questions.forEach((q,i)=>{const value=$(`a-${i}`).value.trim(),valid=/^\d+$/.test(value),ok=valid&&Number(value)===q.total;if(value)answered++;if(ok)correct++;const card=$(`card-${i}`);card.className='card'+(value?(ok?' good':' retry'):'');if(value)retrigger(card,ok?'pop':'shake');const f=$(`f-${i}`);f.className='feedback '+(ok?'correct':'incorrect');f.textContent=revealed?`Answer: ${q.total}`:!value?'Try this one':ok?'Correct!':'Try again';});$('summary').textContent=correct===questions.length?`All ${correct} correct. Great work!`:`${correct} of ${questions.length} correct${answered<questions.length?` · ${questions.length-answered} to try`:''}`;if(answered>0){if(correct===questions.length){playTone([[523,0.12],[659,0.12],[784,0.18]]);celebrate();}else if(correct<answered){playTone([[300,0.14]]);}}updateProgress();applyView();return {correct,total:questions.length};}
+function check(){let correct=0,answered=0;questions.forEach((q,i)=>{const value=$(`a-${i}`).value.trim(),valid=/^\d+$/.test(value),ok=valid&&Number(value)===q.total;if(value)answered++;if(ok)correct++;const card=$(`card-${i}`);card.className='card'+(value?(ok?' good':' retry'):'');if(value)retrigger(card,ok?'pop':'shake');const f=$(`f-${i}`);f.className='feedback '+(ok?'correct':'incorrect');f.textContent=revealed?`Answer: ${q.total}`:!value?'Try this one':ok?'Correct!':'Try again';});$('summary').textContent=correct===questions.length?`All ${correct} correct. Great work!`:`${correct} of ${questions.length} correct${answered<questions.length?` · ${questions.length-answered} to try`:''}`;if(answered>0){if(correct===questions.length){playTone([[523,0.12],[659,0.12],[784,0.18]]);celebrate();}else if(correct<answered){playTone([[300,0.14]]);}}updateProgress();applyView();if(answered>0&&viewMode==='focus')showResultsPanel();return {correct,total:questions.length};}
 $('check').addEventListener('click',check);
 $('reveal').addEventListener('click',()=>{revealed=!revealed;$('reveal').textContent=revealed?'Hide answers':'Show answers';questions.forEach((q,i)=>{$(`f-${i}`).textContent=revealed?`Answer: ${q.total}`:'';$(`f-${i}`).className='feedback';});});
 $('questions').addEventListener('input',e=>{if(!e.target.id.startsWith('a-'))return;const i=Number(e.target.id.slice(2));$(`card-${i}`).className='card';if(!revealed)$(`f-${i}`).textContent='';$('summary').textContent='';applyView();updateAbacusBeads(e.target.value);updateProgress();if(e.target.value.trim())playTone([[880,0.045]],0.09);});
