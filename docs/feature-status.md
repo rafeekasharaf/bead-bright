@@ -7,6 +7,7 @@
 | polish-12 | Interactivity and polish pass | Done |
 | hotfix-4bugs | Fixes for 4 reported polish-12 bugs | Done |
 | landing-and-nav-polish | Landing page at `/`, practice tool at `/practice.html`, nav polish | Done |
+| sheet-improvements | Mobile-default one-at-a-time, sound on by default, results panel | Done |
 
 ## U00 — Practice technique guide
 
@@ -255,3 +256,63 @@ Production checks after deployment:
 - Offline navigation between the landing page and `/practice.html` on a real device.
 - Real phone at mobile width (mobile checks used an iframe).
 - Inside the installed app, the "beadbright" logo on the practice page links to `/`, which now redirects back to the practice page.
+
+## sheet-improvements — Practice sheet improvements
+
+**Status:** Done (2026-09-27)
+
+**Approval scope:** Preview and production. The owner checked the preview that includes the results-panel fixes (https://bead-bright-9hyr1wuj8-rafeekasharafs-projects.vercel.app) and approved it.
+
+**Commits** (fast-forwarded onto `main` from `d2003bd`):
+
+- `c2b4bc2` — From `0006-sheet-improvements.patch`:
+  - one-at-a-time view by default at 650px and below (worksheet above)
+  - sound on by default when no preference is saved
+  - confetti falls from the top of the screen across the full width, with 🌸🌼🌺 flowers (replaces polish-12's confetti near the Check button)
+  - Finish button in its own orange-brown colour with no icon, label visible on mobile
+  - slide-in animation when moving between questions
+  - results panel after Finish/Check in one-at-a-time view: correct / to fix / blank counts, numbered jump-to-question buttons, Keep practicing, and a "🏁 See results" button to reopen it
+  - service worker cache `bead-bright-v8-sheet-improvements`; adds `tests/mobile-default-view.cjs`
+- `58b79ab` — Results panel fixes: "See results" and Previous/Next stay hidden while the panel is open; opening the panel moves focus to its summary (now a labelled region) so screen readers announce it; Keep practicing returns focus to the current answer.
+
+**Deployment:**
+
+- Production: https://bead-bright.vercel.app/practice.html
+- Vercel deployment: https://bead-bright-80dse28jj-rafeekasharafs-projects.vercel.app
+
+### Test results
+
+Ran every test in `tests/README.md` on Node v22.11.0 (Windows), on `58b79ab` before merging:
+
+| Check | Result |
+| --- | --- |
+| `node --check app.js` / `techniques.js` / `sw.js` / `pwa.js` | Pass |
+| `node tests/techniques.cjs` | Pass — 3,520 question sequences |
+| `node tests/interactive.cjs` (adds default sound, results panel, jump buttons, and checks for both fixes, confirmed failing without them) | Pass |
+| `node tests/pwa-assets.cjs` | Pass |
+| `node tests/mobile-default-view.cjs` (new) | Pass |
+| `node tests/ui.cjs` | Pass |
+
+Production checks after deployment:
+
+| Check | Result |
+| --- | --- |
+| Production `index.html`, `practice.html`, `app.js`, `sw.js`, `pwa.js` identical to `58b79ab` | Pass |
+| `/sw.js` serves `bead-bright-v8-sheet-improvements`; v7 cache removed after one reload | Pass (Chrome) |
+| `/tests/` and `/tests/mobile-default-view.cjs` return 404 | Pass |
+| Desktop opens in worksheet view; 390px opens in one-at-a-time view with toggle reading "📄 Worksheet view"; 651px opens in worksheet view | Pass (Chrome; widths via same-origin iframe) |
+| Sound defaults to on (🔊, `aria-pressed="true"`) with no saved preference | Pass (Chrome) |
+| Finish button orange-brown (`#a5470f`), no icon; "Finish" label visible at 390px while Previous stays icon-only | Pass (Chrome) |
+| Real click on Finish with 1 right / 1 wrong / 1 blank: panel shows "1 correct · 1 to fix · 1 blank" with green/orange/grey buttons; no cards shown; Previous/Next and "See results" hidden; focus on the summary | Pass (Chrome) |
+| Real click on jump button 2: panel closes, question 2 shown, focus in its answer, "See results" reappears | Pass (Chrome) |
+| Reopen via "See results": focus back on the summary, button hidden again | Pass (Chrome) |
+| Real click on Keep practicing: panel closes, focus returns to the current answer | Pass (Chrome) |
+| All correct: "All 3 correct! 🎉", 30 confetti pieces (10 flowers) on `body`, `position: fixed`, falling from the top while scrolled | Pass (Chrome) |
+
+Note: the owner's Chrome had a saved "sound off" (`bead-bright-sound-on` = `0`) from an accidental click during the hotfix-4bugs checks. It was removed during these checks to restore the original unset state.
+
+### Untested — spot-check manually
+
+- Screen reader announcement of the results panel (VoiceOver / TalkBack). Focus movement was verified; actual speech was not.
+- Real phone: one-at-a-time default, slide-in animation feel, confetti and flowers.
+- Sound on by default on a real iPhone (silent switch, first-tap audio unlock), and whether default-on sound suits classroom use.
