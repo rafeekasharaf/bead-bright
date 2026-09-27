@@ -1,6 +1,44 @@
 'use strict';
 let digit=1, questions=[], revealed=false, sheetLevel="free";
 const $=id=>document.getElementById(id);
+const SOUND_KEY='bead-bright-sound-on';
+let soundOn=false, audioCtx=null;
+try{soundOn=localStorage.getItem(SOUND_KEY)==='1';}catch{}
+function setSoundButton(){const b=$('sound-toggle');if(!b)return;b.textContent=soundOn?'🔊':'🔇';b.setAttribute('aria-pressed',String(soundOn));b.setAttribute('aria-label',soundOn?'Turn practice sounds off':'Turn practice sounds on');}
+setSoundButton();
+$('sound-toggle')?.addEventListener('click',()=>{soundOn=!soundOn;try{localStorage.setItem(SOUND_KEY,soundOn?'1':'0');}catch{}setSoundButton();if(soundOn)playTone([[440,0.08]]);});
+function playTone(notes){
+  if(!soundOn)return;
+  try{
+    audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    let t=audioCtx.currentTime;
+    notes.forEach(([freq,dur])=>{
+      const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
+      osc.type='sine';osc.frequency.setValueAtTime(freq,t);
+      gain.gain.setValueAtTime(0.0001,t);
+      gain.gain.exponentialRampToValueAtTime(0.18,t+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+      osc.connect(gain).connect(audioCtx.destination);
+      osc.start(t);osc.stop(t+dur+0.02);
+      t+=dur*0.85;
+    });
+  }catch{}
+}
+function celebrate(){
+  if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const colors=['#ffd166','#7cd6c0','#f2a6c9','#a3c4ff','#2655df'];
+  for(let i=0;i<24;i++){
+    const p=document.createElement('div');
+    p.className='confetti-piece';
+    p.style.left=Math.random()*100+'vw';
+    p.style.background=colors[i%colors.length];
+    p.style.animationDuration=(1.6+Math.random()*1.1)+'s';
+    p.style.animationDelay=(Math.random()*0.3)+'s';
+    document.body.appendChild(p);
+    p.addEventListener('animationend',()=>p.remove());
+  }
+}
+function retrigger(el,cls){el.classList.remove(cls);void el.offsetWidth;el.classList.add(cls);}
 function randomInt(min,max){return min+Math.floor(Math.random()*(max-min+1));}
 function makeQuestion(digits,rows,mode,level){return AbacusTechniques.makeQuestion(digits,rows,mode,level);}
 function generate(){const rows=Number($('rows').value),count=Number($('count').value),mode=$('mode').value,level=$('level').value;if(!Number.isInteger(rows)||rows<2||rows>100||!Number.isInteger(count)||count<1||count>30)throw Error('Choose 2–100 rows and 1–30 questions.');questions=Array.from({length:count},()=>makeQuestion(digit,rows,mode,level));sheetLevel=level;revealed=false;$('reveal').textContent='Show answers';$('summary').textContent='';$('error').hidden=true;$('meta').textContent=`${AbacusTechniques.levels[level].name} · ${digit}-digit numbers · ${rows} rows · ${mode==='add'?'Addition':'Addition & subtraction'}`;$('questions').innerHTML=questions.map((q,i)=>`<article class="card" id="card-${i}"><h3>QUESTION ${String(i+1).padStart(2,'0')}</h3><div class="numbers">${q.values.map((v,j)=>`<div class="number"><span class="sign">${j===0?'':v<0?'−':'+'}</span><span>${Math.abs(v)}</span></div>`).join('')}</div><div class="answer"><label for="a-${i}">Answer for question ${i+1}</label><input id="a-${i}" inputmode="numeric" autocomplete="off" placeholder="?" aria-describedby="f-${i}"><p class="feedback" id="f-${i}"></p></div></article>`).join('');}
@@ -23,7 +61,7 @@ $('level').addEventListener('change',()=>{
 });
 updateLevelHelp();
 $('settings').addEventListener('submit',e=>{e.preventDefault();try{generate();}catch(err){$('error').textContent=err.message;$('error').hidden=false;}});
-function check(){let correct=0,answered=0;questions.forEach((q,i)=>{const value=$(`a-${i}`).value.trim(),valid=/^\d+$/.test(value),ok=valid&&Number(value)===q.total;if(value)answered++;if(ok)correct++;$(`card-${i}`).className='card'+(value?(ok?' good':' retry'):'');const f=$(`f-${i}`);f.className='feedback '+(ok?'correct':'incorrect');f.textContent=revealed?`Answer: ${q.total}`:!value?'Try this one':ok?'Correct!':'Try again';});$('summary').textContent=correct===questions.length?`All ${correct} correct. Great work!`:`${correct} of ${questions.length} correct${answered<questions.length?` · ${questions.length-answered} to try`:''}`;return {correct,total:questions.length};}
+function check(){let correct=0,answered=0;questions.forEach((q,i)=>{const value=$(`a-${i}`).value.trim(),valid=/^\d+$/.test(value),ok=valid&&Number(value)===q.total;if(value)answered++;if(ok)correct++;const card=$(`card-${i}`);card.className='card'+(value?(ok?' good':' retry'):'');if(value)retrigger(card,ok?'pop':'shake');const f=$(`f-${i}`);f.className='feedback '+(ok?'correct':'incorrect');f.textContent=revealed?`Answer: ${q.total}`:!value?'Try this one':ok?'Correct!':'Try again';});$('summary').textContent=correct===questions.length?`All ${correct} correct. Great work!`:`${correct} of ${questions.length} correct${answered<questions.length?` · ${questions.length-answered} to try`:''}`;if(answered>0){if(correct===questions.length){playTone([[523,0.12],[659,0.12],[784,0.18]]);celebrate();}else if(correct<answered){playTone([[300,0.14]]);}}return {correct,total:questions.length};}
 $('check').addEventListener('click',check);
 $('reveal').addEventListener('click',()=>{revealed=!revealed;$('reveal').textContent=revealed?'Hide answers':'Show answers';questions.forEach((q,i)=>{$(`f-${i}`).textContent=revealed?`Answer: ${q.total}`:'';$(`f-${i}`).className='feedback';});});
 $('questions').addEventListener('input',e=>{if(!e.target.id.startsWith('a-'))return;const i=Number(e.target.id.slice(2));$(`card-${i}`).className='card';if(!revealed)$(`f-${i}`).textContent='';$('summary').textContent='';});

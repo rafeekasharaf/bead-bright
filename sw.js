@@ -1,4 +1,4 @@
-const CACHE = 'bead-bright-v3-technique-guide';
+const CACHE = 'bead-bright-v4-fun-theme';
 const ASSETS = ['/', '/index.html', '/app.js', '/techniques.js', '/pwa.js', '/manifest.webmanifest', '/icon.svg', '/icon-192.png', '/icon-512.png', '/icon-maskable-512.png', '/apple-touch-icon.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));
