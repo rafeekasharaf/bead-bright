@@ -222,6 +222,15 @@ function loadProfiles(){try{const raw=localStorage.getItem(PROFILES_KEY),list=ra
 function saveProfiles(list){try{localStorage.setItem(PROFILES_KEY,JSON.stringify(list));}catch(e){}}
 function getActiveProfileId(){try{return localStorage.getItem(ACTIVE_PROFILE_KEY);}catch(e){return null;}}
 function setActiveProfileId(id){try{if(id)localStorage.setItem(ACTIVE_PROFILE_KEY,id);else localStorage.removeItem(ACTIVE_PROFILE_KEY);}catch(e){}}
+// A different child (or Guest) gets a fresh sheet, so their answers never land in
+// the previous child's session; that session stays in the previous child's history.
+function changeActiveProfile(id){
+  const prev=getActiveProfileId();
+  setActiveProfileId(id);
+  if((prev||null)===(id||null))return;
+  currentSessionId=null;currentSessionProfileId=null;
+  try{generate();}catch(err){$('error').textContent=err.message;$('error').hidden=false;}
+}
 function refreshProfileBar(){
   const avatarEl=$('profile-bar-avatar'),nameEl=$('profile-bar-name');
   if(!avatarEl||!nameEl)return;
@@ -309,7 +318,7 @@ $('profile-save-btn')?.addEventListener('click',()=>{
     const profile={id:'pr'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),name,avatar:selectedAvatar};
     list.push(profile);
     saveProfiles(list);
-    setActiveProfileId(profile.id);
+    changeActiveProfile(profile.id);
     resetProfileForm();
   }
   refreshProfileBar();refreshProfilesList();
@@ -320,7 +329,7 @@ $('profiles-list')?.addEventListener('click',e=>{
   const id=row.dataset.id;
   if(e.target.closest('.profile-row-select')){
     pendingDeleteId=null;
-    setActiveProfileId(id);
+    changeActiveProfile(id);
     refreshProfileBar();refreshProfilesList();
     try{$('profiles-dialog').close();}catch(err){}
     return;
@@ -335,7 +344,7 @@ $('profiles-list')?.addEventListener('click',e=>{
     if(pendingDeleteId===id){
       saveProfiles(loadProfiles().filter(p=>p.id!==id));
       deleteProfileHistory(id);
-      if(getActiveProfileId()===id)setActiveProfileId(null);
+      if(getActiveProfileId()===id)changeActiveProfile(null);
       if(editingProfileId===id)resetProfileForm();
       pendingDeleteId=null;
       refreshProfileBar();refreshProfilesList();
@@ -348,7 +357,7 @@ $('profiles-list')?.addEventListener('click',e=>{
 });
 $('profile-none-btn')?.addEventListener('click',()=>{
   pendingDeleteId=null;
-  setActiveProfileId(null);
+  changeActiveProfile(null);
   refreshProfileBar();refreshProfilesList();
   try{$('profiles-dialog').close();}catch(err){}
 });

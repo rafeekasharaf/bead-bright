@@ -259,4 +259,42 @@ function historyRows(document) {
   assert.equal(sessions.some(s => s.id === 's0'), false, 'the oldest sessions must roll off first');
 }
 
-console.log('History checks passed: guest mode saves nothing, first answer creates one session and further typing updates it in place, finished status tracks whether every question was answered, abandoning a sheet leaves the old session untouched and does not record an untouched new one, resuming restores exact questions/answers and continues the same session, viewing a finished session is read-only and non-mutating, the banner dismiss action exits review/resume cleanly, deleting a profile deletes its history, and history rolls over at a 50-session cap.');
+// Switching to a different child (or Guest) starts a fresh sheet, so answers
+// never land in the previous child's session; that session stays resumable.
+{
+  const store = {};
+  const {document} = load(store);
+  const $ = $$(document);
+  addProfile(document, 'Mia', 0);
+  addProfile(document, 'Leo', 1);
+  const ids = Object.fromEntries(JSON.parse(store['bead-bright-profiles-v1']).map(p => [p.name, p.id]));
+  const switchTo = name => {
+    click(document, 'profile-bar-btn');
+    const row = Array.from(document.querySelectorAll('.profile-row')).find(r => r.dataset.id === ids[name]);
+    row.querySelector('.profile-row-select').dispatchEvent(Ev(document)('click', {bubbles: true}));
+  };
+  const sessionsFor = name => (JSON.parse(store['bead-bright-history-v1'] || '{}')[ids[name]] || []);
+
+  switchTo('Mia');
+  type(document, 'a-0', '11');
+  const miaSheet = $('questions').innerHTML;
+  switchTo('Leo');
+  assert.notEqual($('questions').innerHTML, miaSheet, 'a different child must get a fresh sheet');
+  assert.equal($('a-0').value, '', "the fresh sheet must not carry the previous child's answers");
+  type(document, 'a-1', '22');
+  switchTo('Leo');
+  type(document, 'a-2', '23');
+  click(document, 'profile-bar-btn');
+  click(document, 'profile-none-btn');
+  type(document, 'a-0', '33');
+
+  assert.equal(sessionsFor('Mia').length, 1);
+  assert.deepEqual(sessionsFor('Mia')[0].answers.slice(0, 3), ['11', '', ''], "Mia's session holds only Mia's answer");
+  assert.equal(sessionsFor('Mia')[0].finished, false, "Mia's sheet stays Unfinished and resumable");
+  assert.equal(sessionsFor('Leo').length, 1, 're-selecting the already-active child keeps the same sheet and session');
+  assert.deepEqual(sessionsFor('Leo')[0].answers.slice(0, 3), ['', '22', '23'], "Leo's session holds only Leo's answers");
+  const all = JSON.parse(store['bead-bright-history-v1']);
+  assert.equal(Object.values(all).flat().some(sess => sess.answers.includes('33')), false, 'Guest answers are never saved');
+}
+
+console.log('History checks passed: switching child starts a fresh sheet and keeps answers separate per child, guest mode saves nothing, first answer creates one session and further typing updates it in place, finished status tracks whether every question was answered, abandoning a sheet leaves the old session untouched and does not record an untouched new one, resuming restores exact questions/answers and continues the same session, viewing a finished session is read-only and non-mutating, the banner dismiss action exits review/resume cleanly, deleting a profile deletes its history, and history rolls over at a 50-session cap.');
