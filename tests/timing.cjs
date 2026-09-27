@@ -306,6 +306,15 @@ async function testRealScheduledNote() {
   await delay(120);
   assert.equal($('timing-status').textContent, '⏳ 1 minute left', 'the scheduled note fires with no user interaction');
   vm.runInContext('clearCountdownTimeout()', context);
+  // Scheduling when the last minute has already started shows the note at once.
+  selectValue(document, 'timing-mode', 'countdown');
+  setFakeNow(context, 11_000_000);
+  document.getElementById('settings').dispatchEvent(Ev(document)('submit', {cancelable: true}));
+  assert.equal($('timing-status').textContent, '⏱ Timing on');
+  setFakeNow(context, 11_070_000); // 50s left of 2 minutes
+  vm.runInContext('scheduleCountdownCheck()', context);
+  assert.equal($('timing-status').textContent, '⏳ 1 minute left', 'no waiting for a timer that will never be set');
+  vm.runInContext('clearCountdownTimeout()', context);
 }
 
 testRealScheduledCountdown().then(testRealScheduledNote).then(() => {

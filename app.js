@@ -251,6 +251,7 @@ function scheduleCountdownCheck(){
   if(remaining<=0){triggerTimeUp();return;}
   const untilWarn=remaining-COUNTDOWN_WARN_MS;
   if(timerState.limitMs>COUNTDOWN_WARN_MS&&untilWarn>0){try{countdownWarnTimeout=setTimeout(updateTimingControl,untilWarn+50);}catch(e){}}
+  else updateTimingControl(); // already in the last minute: show the note now
   try{countdownTimeout=setTimeout(()=>{if(elapsedMs()>=timerState.limitMs)triggerTimeUp();else scheduleCountdownCheck();},remaining+50);}catch(e){}
 }
 function checkCountdownExpiry(){
