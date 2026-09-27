@@ -5,6 +5,7 @@
 | U00 | Practice technique guide | Done   |
 | Fxx | Operator fix and fun theme | Done |
 | polish-12 | Interactivity and polish pass | Done |
+| hotfix-4bugs | Fixes for 4 reported polish-12 bugs | Done |
 
 ## U00 — Practice technique guide
 
@@ -144,3 +145,59 @@ Behavior checks ran production files in linkedom with stubbed `matchMedia`. They
 - Reduced-motion behavior on a real device.
 - Known cosmetic behavior: after Check, the first keystroke in a card replays its short fade-in.
 - Installed-app upgrade from `bead-bright-v4-fun-theme` to `bead-bright-v5-interactive-polish`, including offline launch.
+
+## hotfix-4bugs — Fixes for 4 reported polish-12 bugs
+
+**Status:** Done (2026-09-27)
+
+**Approval scope:** Preview and production. Claude checked the preview (https://bead-bright-d8l163kta-rafeekasharafs-projects.vercel.app) in the owner's signed-in Chrome before merging.
+
+**Commits** (fast-forwarded onto `main` from `c53f51a`):
+
+- `3388196` — Fixes from `0004-hotfix-4bugs.patch`.
+- `849728f` — Bump service worker cache to `bead-bright-v6-hotfix-4bugs`. The patch left the cache at v5; since `sw.js` serves `index.html` and `app.js` cache-first, existing v5 visitors would otherwise never have received the fixes.
+
+**Deployment:**
+
+- Production: https://bead-bright.vercel.app/
+- Vercel deployment: https://bead-bright-54jqkawcy-rafeekasharafs-projects.vercel.app
+
+### What was fixed
+
+1. **Card vanished while typing in one-at-a-time view.** The input handler reset the card's classes, removing `is-current`, so the focused card was hidden before Next was pressed. The handler now reapplies the view.
+2. **Bottom mini-abacus bead clipped.** SVG viewBox height raised from 100 to 116.
+3. **Previous/Next crowded the card.** Added 22px above the focus nav and 6px below the focused card.
+4. **Print sheet button showed on mobile.** Hidden at widths of 650px and below; still shown on desktop.
+
+### Test results
+
+Ran the checks in `tests/README.md` on Node v22.11.0 (Windows), on `849728f` before merging:
+
+| Check | Result |
+| --- | --- |
+| `node --check app.js` / `techniques.js` / `sw.js` | Pass |
+| `node tests/techniques.cjs` | Pass — 3,520 question sequences |
+| `node tests/ui.cjs` (UI regression suite) | Pass |
+| `node tests/interactive.cjs` (adds a check for fix 1; confirmed it fails on the old `app.js`) | Pass |
+
+Browser checks, run by Claude in Chrome (desktop, 1920px window) on both the preview and production with real clicks and typing:
+
+| Check | Preview | Production |
+| --- | --- | --- |
+| One-at-a-time view: typing an answer keeps the card visible (only current card shown, opacity 1) before Next | Pass | Pass |
+| Next moves to question 2; Previous becomes enabled | Pass | — |
+| Mini-abacus beads move as you type; progress updates to "1 of 6 answered" | Pass | Pass |
+| Lowest bead fully visible (bead bottom y=106 inside viewBox height 116) | Pass | Pass |
+| Clear space between the question card and Previous/Next (22px) | Pass | Pass |
+| Print sheet hidden at 390px and 650px, shown at 651px and desktop (checked in a same-origin iframe, since the maximized window could not be resized) | Pass | Pass |
+| `/sw.js` serves `bead-bright-v6-hotfix-4bugs` | Pass | Pass |
+| `/tests/` returns 404 | — | Pass |
+| Production `index.html`, `app.js`, `sw.js` identical to `849728f` | — | Pass |
+
+**Real upgrade observed:** the Chrome profile used had v5 installed. The first production load after deploy still ran the old v5 files while v6 installed in the background; on the next load the v5 cache was deleted and the fixed files were served. Users who already have the app open will see the fixes on their next visit or reload, not immediately.
+
+### Untested — spot-check manually
+
+- Real mobile device at phone width (the Print check used an iframe, not a phone).
+- iPhone installed app upgrading from v5 to v6.
+- Real-device animation/sound feel and grid layout at other widths, as listed for polish-12.
