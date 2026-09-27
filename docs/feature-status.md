@@ -4,6 +4,7 @@
 | --- | ------------------------ | ------ |
 | U00 | Practice technique guide | Done   |
 | Fxx | Operator fix and fun theme | Done |
+| polish-12 | Interactivity and polish pass | Done |
 
 ## U00 — Practice technique guide
 
@@ -90,3 +91,56 @@ The behavior checks ran the production `index.html`, `app.js` and `techniques.js
 - Visual rendering of the operator alignment and theme in a real browser, beyond the owner's preview check.
 - Audible sound output, including on iPhone (silent switch, first-tap audio unlock).
 - Real iPhone and installed-app upgrade from `bead-bright-v3-technique-guide` to `bead-bright-v4-fun-theme`, including offline launch.
+
+## polish-12 — Interactivity and polish pass
+
+**Status:** Done (2026-09-27)
+
+**Approval scope:** Preview and production. The owner checked the preview that includes the fixes commit (https://bead-bright-9pko4wz9c-rafeekasharafs-projects.vercel.app) in their browser; Claude could not open it because Vercel Deployment Protection requires login.
+
+**Commits** (fast-forwarded onto `main` from `bb4b35d`):
+
+- `ed0b8ae` — 12-item interactivity/polish pass from `0003-polish-12-interactive.patch`: one-at-a-time view, decorative mini abacus, progress bar, staggered card animations, digit-button dots, confetti near the Check button, bead-tick sound, mascot, warmer error copy, typography.
+- `6b2d235` — Fix checked cards vanishing (base `opacity:0` on `.card` hid answered cards once pop/shake replaced the entry animation) and truncated mini-abacus totals (rods now sized to the largest total, up to 7).
+
+**Deployment:**
+
+- Production: https://bead-bright.vercel.app/
+- Vercel deployment: https://bead-bright-f9jugvt7j-rafeekasharafs-projects.vercel.app
+
+### Test results
+
+Ran the checks in `tests/README.md` on Node v22.11.0 (Windows), on `6b2d235` before merging:
+
+| Check | Result |
+| --- | --- |
+| `node --check app.js` / `techniques.js` / `sw.js` | Pass |
+| `node tests/techniques.cjs` | Pass — 3,520 question sequences |
+| `node tests/ui.cjs` (UI regression suite) | Pass |
+| `node tests/interactive.cjs` (new; includes regression checks for both fixes) | Pass |
+
+Linkedom-based suites ran with linkedom 0.18.13 and `--experimental-require-module`.
+
+Production checks after deployment:
+
+| Check | Result |
+| --- | --- |
+| Production `index.html`, `app.js`, `techniques.js` identical to `6b2d235` | Pass |
+| `/sw.js` cache is `bead-bright-v5-interactive-polish` | Pass |
+| `/tests/` returns 404 (also `/tests/interactive.cjs`) | Pass |
+| "🧮 One at a time" toggle: one card shown, Previous disabled on first, Next steps through, last shows "Finish ✔", Previous goes back | Pass (simulated DOM) |
+| Mini-abacus beads activate as an answer is typed (7 → one upper + two lower) | Pass (simulated DOM) |
+| Progress bar label and width update as answers are entered | Pass (simulated DOM) |
+| Mascot sits in the same row as the headline | Pass (DOM structure) |
+| Finish on a fully-correct sheet: 24 confetti pieces inside the Check/Show answers row, absolutely positioned, 120px fall | Pass (simulated DOM + CSS check) |
+| Checked cards stay visible (no base `opacity:0` on `.card`) | Pass (CSS check) |
+
+Behavior checks ran production files in linkedom with stubbed `matchMedia`. They verify logic, DOM output and CSS rules, not rendered layout, animation or audio.
+
+### Untested — spot-check manually
+
+- Real-device animation and sound feel: card entry stagger, pop/shake, bead movement, confetti, bead-tick and chime sounds (including iPhone silent switch and first-tap audio unlock).
+- CSS Grid layout at various widths (e.g. 320px, 650px breakpoint, 950px breakpoint, desktop), including the one-at-a-time view and a 6–7 rod mini abacus on 4-digit sheets.
+- Reduced-motion behavior on a real device.
+- Known cosmetic behavior: after Check, the first keystroke in a card replays its short fade-in.
+- Installed-app upgrade from `bead-bright-v4-fun-theme` to `bead-bright-v5-interactive-polish`, including offline launch.
