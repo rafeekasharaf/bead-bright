@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const {parseHTML} = require('linkedom');
 const root = path.resolve(__dirname, '..');
 const A = require('../techniques.js');
+const {stubDialogs, answerPinPrompts} = require('./pin-helpers.cjs');
 const appSrc = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 
 function makeLocalStorage(backingStore) {
@@ -23,11 +24,7 @@ function load(sharedStore) {
     Object.defineProperty(select, 'value', {get:()=>value, set:next=>{value=next;}});
   }
   window.HTMLElement.prototype.focus = function () {};
-  for (const id of ['profiles-dialog', 'history-dialog']) {
-    const el = document.getElementById(id);
-    el.showModal = function () { this.setAttribute('open', ''); };
-    el.close = function () { this.removeAttribute('open'); };
-  }
+  stubDialogs(document);
   const localStorage = makeLocalStorage(sharedStore);
   const context = vm.createContext({document, window, AbacusTechniques: A, console, localStorage});
   vm.runInContext(appSrc, context);
@@ -45,6 +42,7 @@ function addProfile(document, name, avatarIndex) {
   setValue(document, 'profile-name-input', name);
   document.getElementById('avatar-picker').children[avatarIndex].dispatchEvent(Ev(document)('click', {bubbles: true}));
   click(document, 'profile-save-btn');
+  answerPinPrompts(document);
   try { document.getElementById('profiles-dialog').close(); } catch (e) {}
 }
 
@@ -276,6 +274,7 @@ function historyDeleteButtons(document) {
     click(document, 'profile-bar-btn');
     const row = Array.from(document.querySelectorAll('.profile-row')).find(r => r.dataset.id === ids[name]);
     row.querySelector('.profile-row-select').dispatchEvent(Ev(document)('click', {bubbles: true}));
+    answerPinPrompts(document);
   };
   const sessionsFor = name => (JSON.parse(store['bead-bright-history-v1'] || '{}')[ids[name]] || []);
 
@@ -378,6 +377,7 @@ function historyDeleteButtons(document) {
   const switchTo = name => {
     click(document, 'profile-bar-btn');
     tap(Array.from(document.querySelectorAll('.profile-row')).find(r => r.dataset.id === ids[name]).querySelector('.profile-row-select'));
+    answerPinPrompts(document);
   };
   type(document, 'a-0', '1');                    // Leo: one session
   switchTo('Mia');

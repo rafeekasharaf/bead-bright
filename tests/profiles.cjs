@@ -5,6 +5,7 @@ const vm = require('node:vm');
 const {parseHTML} = require('linkedom');
 const root = path.resolve(__dirname, '..');
 const A = require('../techniques.js');
+const {stubDialogs, answerPinPrompts} = require('./pin-helpers.cjs');
 const appSrc = fs.readFileSync(path.join(root, 'app.js'), 'utf8');
 
 function makeLocalStorage(backingStore) {
@@ -23,13 +24,7 @@ function load(sharedStore) {
     Object.defineProperty(select, 'value', {get:()=>value, set:next=>{value=next;}});
   }
   window.HTMLElement.prototype.focus = function () {};
-  // Linkedom renders <dialog> as a plain HTMLElement with no showModal/close.
-  // app.js already guards these calls in try/catch, so stub them on the one
-  // dialog instance this suite uses; open/close are observed via the
-  // element's own `open` attribute, same as a real browser.
-  const profilesDialog = document.getElementById('profiles-dialog');
-  profilesDialog.showModal = function () { this.setAttribute('open', ''); };
-  profilesDialog.close = function () { this.removeAttribute('open'); };
+  stubDialogs(document);
   const localStorage = makeLocalStorage(sharedStore);
   const context = vm.createContext({document, window, AbacusTechniques: A, console, localStorage});
   vm.runInContext(appSrc, context);
@@ -69,6 +64,7 @@ const setValue = (document, id, value) => { document.getElementById(id).value = 
 
   document.getElementById('avatar-picker').children[0].dispatchEvent(new (document.defaultView.Event)('click', {bubbles: true})); // fox
   click(document, 'profile-save-btn');
+  answerPinPrompts(document);
   assert.equal($('profile-error').hidden, true);
   assert.equal($('profiles-list').children.length, 1);
   assert.equal($('profile-bar-name').textContent, 'Mia', 'the new profile must become active immediately');
@@ -95,6 +91,7 @@ const setValue = (document, id, value) => { document.getElementById(id).value = 
     setValue(doc, 'profile-name-input', name);
     doc.getElementById('avatar-picker').children[avatarIndex].dispatchEvent(new (doc.defaultView.Event)('click', {bubbles: true}));
     click(doc, 'profile-save-btn');
+    answerPinPrompts(doc);
   }
   addProfile(document, 'Mia', 0);
   addProfile(document, 'Leo', 3); // unicorn
@@ -105,6 +102,7 @@ const setValue = (document, id, value) => { document.getElementById(id).value = 
   const rows = Array.from($('profiles-list').children);
   const miaRow = rows.find(r => r.querySelector('.name').textContent === 'Mia');
   miaRow.querySelector('.profile-row-select').dispatchEvent(new (document.defaultView.Event)('click', {bubbles: true}));
+  answerPinPrompts(document);
   assert.equal($('profile-bar-name').textContent, 'Mia');
   assert.equal($('profiles-dialog').hasAttribute('open'), false, 'selecting a profile closes the dialog');
 
@@ -126,6 +124,7 @@ const setValue = (document, id, value) => { document.getElementById(id).value = 
   setValue(document, 'profile-name-input', 'Mia');
   document.getElementById('avatar-picker').children[0].dispatchEvent(new (document.defaultView.Event)('click', {bubbles: true}));
   click(document, 'profile-save-btn');
+  answerPinPrompts(document);
 
   const row = $('profiles-list').children[0];
   row.querySelector('.profile-row-edit').dispatchEvent(new (document.defaultView.Event)('click', {bubbles: true}));
@@ -160,6 +159,7 @@ const setValue = (document, id, value) => { document.getElementById(id).value = 
     setValue(doc, 'profile-name-input', name);
     doc.getElementById('avatar-picker').children[avatarIndex].dispatchEvent(new (doc.defaultView.Event)('click', {bubbles: true}));
     click(doc, 'profile-save-btn');
+    answerPinPrompts(doc);
   }
   addProfile(document, 'Mia', 0);
   addProfile(document, 'Leo', 3);

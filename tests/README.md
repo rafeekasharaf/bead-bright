@@ -12,7 +12,21 @@ node tests/pwa-assets.cjs
 node tests/mobile-default-view.cjs
 node tests/profiles.cjs
 node tests/history.cjs
+node tests/pins.cjs
 ```
+
+`tests/pins.cjs` covers child and grown-up PINs: the built-in SHA-256 matches
+Node's; PINs are stored only as salted hashes; the first profile sets up the
+grown-up PIN and shows a one-time recovery code; cancelling adds nobody; a
+wrong PIN never switches and the grown-up PIN opens any child; five wrong
+tries lock for 30 seconds, then longer; reopening the app (fresh
+`sessionStorage`) asks again but a same-visit reload does not; nothing is
+saved while a child is locked; the forgot-PIN flows for a child (grown-up
+reset, history kept) and for the grown-up (recovery code, which then
+stops working); editing or deleting another child needs their PIN or the
+grown-up PIN; and older profiles without a PIN keep working with a nudge to
+add one. `tests/pin-helpers.cjs` is shared by the suites that create or
+switch profiles: it stubs `<dialog>` and answers PIN prompts.
 
 `tests/history.cjs` uses the same Linkedom harness as `tests/profiles.cjs`
 (plus a `showModal`/`close` stub for both dialogs it uses) to cover

@@ -213,6 +213,59 @@ function generate(){
 }
 $('digits').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;digit=Number(b.dataset.digit);for(const item of $('digits').children)item.setAttribute('aria-pressed',String(item===b));buildAbacusBase(abacusSize());updateAbacusBeads(0);});
 
+// --- PINs: stored only as salted hashes in this browser ---
+// This keeps brothers and sisters out of each other's profiles; it is not
+// protection against someone with browser developer tools.
+const GROWNUP_KEY='bead-bright-grownup-v1', PIN_ATTEMPTS_KEY='bead-bright-pin-attempts-v1', UNLOCKED_KEY='bead-bright-unlocked-v1';
+const PIN_TRIES_BEFORE_LOCK=5, PIN_FIRST_LOCK_SECONDS=30, PIN_MAX_LOCK_SECONDS=900;
+const SHA256_K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+// SHA-256 of an ASCII string (PINs, hex salts and recovery codes are all ASCII).
+function sha256Hex(text){
+  const bytes=[];for(let i=0;i<text.length;i++)bytes.push(text.charCodeAt(i)&255);
+  const bits=bytes.length*8;bytes.push(0x80);while(bytes.length%64!==56)bytes.push(0);
+  for(let i=7;i>=0;i--)bytes.push(i>3?0:(bits>>>(8*i))&255);
+  let H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const w=new Array(64);
+  for(let o=0;o<bytes.length;o+=64){
+    for(let i=0;i<16;i++)w[i]=(bytes[o+4*i]<<24)|(bytes[o+4*i+1]<<16)|(bytes[o+4*i+2]<<8)|bytes[o+4*i+3];
+    for(let i=16;i<64;i++){const x=w[i-15],y=w[i-2];w[i]=(w[i-16]+(((x>>>7)|(x<<25))^((x>>>18)|(x<<14))^(x>>>3))+w[i-7]+(((y>>>17)|(y<<15))^((y>>>19)|(y<<13))^(y>>>10)))|0;}
+    let [a,b,c,d,e,f,g,h]=H;
+    for(let i=0;i<64;i++){
+      const t1=(h+(((e>>>6)|(e<<26))^((e>>>11)|(e<<21))^((e>>>25)|(e<<7)))+((e&f)^(~e&g))+SHA256_K[i]+w[i])|0;
+      const t2=((((a>>>2)|(a<<30))^((a>>>13)|(a<<19))^((a>>>22)|(a<<10)))+((a&b)^(a&c)^(b&c)))|0;
+      h=g;g=f;f=e;e=(d+t1)|0;d=c;c=b;b=a;a=(t1+t2)|0;
+    }
+    H=[H[0]+a,H[1]+b,H[2]+c,H[3]+d,H[4]+e,H[5]+f,H[6]+g,H[7]+h].map(x=>x|0);
+  }
+  return H.map(x=>(x>>>0).toString(16).padStart(8,'0')).join('');
+}
+function randomBytes(n){const out=new Uint8Array(n);try{crypto.getRandomValues(out);}catch(e){for(let i=0;i<n;i++)out[i]=Math.floor(Math.random()*256);}return out;}
+function hashSecret(value,salt){let h=salt+':'+value;for(let i=0;i<1000;i++)h=sha256Hex(h+salt);return h;}
+function makeSecret(value){const salt=Array.from(randomBytes(16),b=>b.toString(16).padStart(2,'0')).join('');return {salt,hash:hashSecret(value,salt)};}
+function checkSecret(secret,value){return !!(secret&&secret.hash&&secret.salt)&&hashSecret(value,secret.salt)===secret.hash;}
+function makeRecoveryCode(){const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789',b=randomBytes(8);const c=Array.from(b,x=>alphabet[x%alphabet.length]).join('');return c.slice(0,4)+'-'+c.slice(4);}
+function normalizeCode(code){return String(code||'').toUpperCase().replace(/[^A-Z0-9]/g,'');}
+function loadGrownup(){try{const g=JSON.parse(localStorage.getItem(GROWNUP_KEY)||'null');return g&&g.pin?g:null;}catch(e){return null;}}
+function saveGrownup(g){try{localStorage.setItem(GROWNUP_KEY,JSON.stringify(g));}catch(e){}}
+function loadPinAttempts(){try{const a=JSON.parse(localStorage.getItem(PIN_ATTEMPTS_KEY)||'{}');return a&&typeof a==='object'?a:{};}catch(e){return {};}}
+function savePinAttempts(a){try{localStorage.setItem(PIN_ATTEMPTS_KEY,JSON.stringify(a));}catch(e){}}
+function pinLockSeconds(target){const a=loadPinAttempts()[target];return a&&a.lockedUntil>Date.now()?Math.ceil((a.lockedUntil-Date.now())/1000):0;}
+function recordPinFailure(target){
+  const all=loadPinAttempts(),a=all[target]||{fails:0,locks:0,lockedUntil:0};
+  a.fails++;
+  if(a.fails>=PIN_TRIES_BEFORE_LOCK){a.locks++;a.fails=0;a.lockedUntil=Date.now()+Math.min(PIN_FIRST_LOCK_SECONDS*2**(a.locks-1),PIN_MAX_LOCK_SECONDS)*1000;}
+  all[target]=a;savePinAttempts(all);
+}
+function clearPinFailures(target){const all=loadPinAttempts();delete all[target];savePinAttempts(all);}
+// The unlocked child lasts for this visit only (this tab), so reopening the app asks again.
+let memoryUnlockedId=null;
+function getUnlockedId(){try{return sessionStorage.getItem(UNLOCKED_KEY);}catch(e){return memoryUnlockedId;}}
+function setUnlockedId(id){memoryUnlockedId=id||null;try{if(id)sessionStorage.setItem(UNLOCKED_KEY,id);else sessionStorage.removeItem(UNLOCKED_KEY);}catch(e){}}
+function profileHasPin(p){return !!(p&&p.pin&&p.pin.hash);}
+function isProfileUnlocked(id){const p=id&&loadProfiles().find(x=>x.id===id);return !!p&&(!profileHasPin(p)||getUnlockedId()===id);}
+// The child whose history may be read and changed right now (null for Guest or a locked child).
+function effectiveProfileId(){const id=getActiveProfileId();return isProfileUnlocked(id)?id:null;}
+
 // --- local child profiles ---
 const PROFILES_KEY='bead-bright-profiles-v1';
 const ACTIVE_PROFILE_KEY='bead-bright-active-profile-v1';
@@ -238,7 +291,7 @@ function refreshProfileBar(){
   const profile=activeId?loadProfiles().find(p=>p.id===activeId):null;
   if(profile){avatarEl.textContent=profile.avatar;nameEl.textContent=profile.name;}
   else{avatarEl.textContent='🙂';nameEl.textContent='Practicing as Guest';}
-  const historyBtn=$('history-btn');if(historyBtn)historyBtn.hidden=!profile;
+  const historyBtn=$('history-btn');if(historyBtn)historyBtn.hidden=!profile||!isProfileUnlocked(activeId);
   // The first call runs before the history section has loaded; the first sheet sets the status then.
   try{updateSaveStatus();}catch(e){}
 }
@@ -254,6 +307,7 @@ function resetProfileForm(){
   setSelectedAvatar(null);
   if($('profile-save-btn'))$('profile-save-btn').textContent='Add profile';
   if($('profile-cancel-edit'))$('profile-cancel-edit').hidden=true;
+  if($('profile-pin-btn'))$('profile-pin-btn').hidden=true;
   if($('profile-error'))$('profile-error').hidden=true;
 }
 function startEditProfile(id){
@@ -263,6 +317,7 @@ function startEditProfile(id){
   setSelectedAvatar(p.avatar);
   $('profile-save-btn').textContent='Save changes';
   $('profile-cancel-edit').hidden=false;
+  if($('profile-pin-btn')){$('profile-pin-btn').hidden=false;$('profile-pin-btn').textContent=profileHasPin(p)?'Change PIN':'Add a PIN';}
   $('profile-error').hidden=true;
 }
 function refreshProfilesList(){
@@ -315,15 +370,22 @@ $('profile-save-btn')?.addEventListener('click',()=>{
     const p=list.find(x=>x.id===editingProfileId);
     if(p){p.name=name;p.avatar=selectedAvatar;saveProfiles(list);}
     resetProfileForm();
-  }else{
-    if(list.length>=MAX_PROFILES){showProfileError(`You can have up to ${MAX_PROFILES} profiles. Delete one to add another.`);return;}
-    const profile={id:'pr'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),name,avatar:selectedAvatar};
-    list.push(profile);
-    saveProfiles(list);
+    refreshProfileBar();refreshProfilesList();
+    return;
+  }
+  if(list.length>=MAX_PROFILES){showProfileError(`You can have up to ${MAX_PROFILES} profiles. Delete one to add another.`);return;}
+  // Every new child chooses a PIN; the first one also sets up the grown-up PIN.
+  const draft={name,avatar:selectedAvatar};
+  ensureGrownupPin(()=>chooseChildPin(draft,pin=>{
+    const all=loadProfiles();
+    const profile={id:'pr'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),name:draft.name,avatar:draft.avatar,pin};
+    all.push(profile);saveProfiles(all);
+    closePinDialog();
+    setUnlockedId(profile.id);
     changeActiveProfile(profile.id);
     resetProfileForm();
-  }
-  refreshProfileBar();refreshProfilesList();
+    refreshProfileBar();refreshProfilesList();
+  },closePinDialog),closePinDialog);
 });
 $('profile-cancel-edit')?.addEventListener('click',resetProfileForm);
 $('profiles-list')?.addEventListener('click',e=>{
@@ -331,25 +393,35 @@ $('profiles-list')?.addEventListener('click',e=>{
   const id=row.dataset.id;
   if(e.target.closest('.profile-row-select')){
     pendingDeleteId=null;
-    changeActiveProfile(id);
-    refreshProfileBar();refreshProfilesList();
-    try{$('profiles-dialog').close();}catch(err){}
+    const p=loadProfiles().find(x=>x.id===id);if(!p)return;
+    const open=()=>{
+      closePinDialog();
+      setUnlockedId(id);
+      changeActiveProfile(id);
+      refreshProfileBar();refreshProfilesList();
+      try{$('profiles-dialog').close();}catch(err){}
+    };
+    if(!profileHasPin(p)||(getActiveProfileId()===id&&isProfileUnlocked(id)))open();
+    else askChildPin(p,open,closePinDialog);
     return;
   }
   if(e.target.closest('.profile-row-edit')){
     pendingDeleteId=null;
-    startEditProfile(id);
-    refreshProfilesList();
+    authorizeProfile(id,()=>{closePinDialog();startEditProfile(id);refreshProfilesList();});
     return;
   }
   if(e.target.closest('.profile-row-delete')){
     if(pendingDeleteId===id){
-      saveProfiles(loadProfiles().filter(p=>p.id!==id));
-      deleteProfileHistory(id);
-      if(getActiveProfileId()===id)changeActiveProfile(null);
-      if(editingProfileId===id)resetProfileForm();
-      pendingDeleteId=null;
-      refreshProfileBar();refreshProfilesList();
+      authorizeProfile(id,()=>{
+        closePinDialog();
+        saveProfiles(loadProfiles().filter(p=>p.id!==id));
+        deleteProfileHistory(id);
+        clearPinFailures(id);
+        if(getActiveProfileId()===id){setUnlockedId(null);changeActiveProfile(null);}
+        if(editingProfileId===id)resetProfileForm();
+        pendingDeleteId=null;
+        refreshProfileBar();refreshProfilesList();
+      });
     }else{
       pendingDeleteId=id;
       refreshProfilesList();
@@ -359,6 +431,7 @@ $('profiles-list')?.addEventListener('click',e=>{
 });
 $('profile-none-btn')?.addEventListener('click',()=>{
   pendingDeleteId=null;
+  setUnlockedId(null);
   changeActiveProfile(null);
   refreshProfileBar();refreshProfilesList();
   try{$('profiles-dialog').close();}catch(err){}
@@ -384,6 +457,7 @@ function updateSaveStatus(){
   let text='',state='';
   if(reviewOnly){}
   else if(!p){text='Guest practice isn’t saved. Pick a profile before you start to keep your work.';state='guest';}
+  else if(!isProfileUnlocked(id)){text=`Enter ${p.name}’s PIN to save your work.`;state='guest';}
   else if(currentSessionId&&currentSessionProfileId===id){
     text=lastSaveFailed?`Couldn’t save to ${p.name}’s history — this device’s storage may be full.`:`✓ Saved to ${p.name}’s history`;
     state=lastSaveFailed?'failed':'saved';
@@ -392,6 +466,12 @@ function updateSaveStatus(){
   if(el.textContent!==text)el.textContent=text;
   el.className='save-status'+(state?' '+state:'');
   el.hidden=!text;
+  // Profiles made before PINs existed stay open until one is added.
+  const nudge=$('pin-nudge');
+  if(nudge){
+    nudge.hidden=reviewOnly||!p||profileHasPin(p);
+    if(!nudge.hidden)nudge.textContent=`🔒 Add a PIN to protect ${p.name}’s history`;
+  }
 }
 function getProfileSessions(profileId){const all=loadHistory();return Array.isArray(all[profileId])?all[profileId]:[];}
 function upsertSession(profileId,session){
@@ -406,7 +486,7 @@ function upsertSession(profileId,session){
 function deleteProfileHistory(profileId){const all=loadHistory();delete all[profileId];saveHistory(all);}
 function ensureSession(){
   if(reviewOnly||currentSessionId)return;
-  const activeId=getActiveProfileId();if(!activeId)return;
+  const activeId=effectiveProfileId();if(!activeId)return;
   const now=new Date().toISOString();
   const session={
     id:'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
@@ -465,7 +545,7 @@ function loadSessionIntoSheet(profileId,sessionId){
 function refreshHistoryList(){
   const list=$('history-list');if(!list)return;
   list.textContent='';
-  const activeId=getActiveProfileId();
+  const activeId=effectiveProfileId();
   const sessions=activeId?getProfileSessions(activeId):[];
   if(!sessions.length){
     const empty=document.createElement('p');empty.className='profiles-intro';
@@ -500,7 +580,7 @@ function refreshHistoryList(){
 let pendingHistoryDeleteId=null, pendingHistoryClear=false;
 function refreshHistoryClearButton(){
   const b=$('history-clear');if(!b)return;
-  const activeId=getActiveProfileId(),p=activeId?loadProfiles().find(x=>x.id===activeId):null;
+  const activeId=effectiveProfileId(),p=activeId?loadProfiles().find(x=>x.id===activeId):null;
   b.hidden=!p||!getProfileSessions(activeId).length;
   b.classList.toggle('confirming',pendingHistoryClear);
   b.textContent=pendingHistoryClear&&p?`Tap again to delete all of ${p.name}’s history`:'Delete all history';
@@ -510,7 +590,7 @@ function forgetDeletedSession(deletedIds){
   if(currentSessionId&&deletedIds.includes(currentSessionId)){currentSessionId=null;currentSessionProfileId=null;updateSaveStatus();}
 }
 $('history-list')?.addEventListener('click',e=>{
-  const activeId=getActiveProfileId();if(!activeId)return;
+  const activeId=effectiveProfileId();if(!activeId)return;
   const del=e.target.closest('.history-row-delete');
   if(del){
     pendingHistoryClear=false;
@@ -530,7 +610,7 @@ $('history-list')?.addEventListener('click',e=>{
   loadSessionIntoSheet(activeId,row.dataset.id);
 });
 $('history-clear')?.addEventListener('click',()=>{
-  const activeId=getActiveProfileId();if(!activeId)return;
+  const activeId=effectiveProfileId();if(!activeId)return;
   pendingHistoryDeleteId=null;
   if(pendingHistoryClear){
     forgetDeletedSession(getProfileSessions(activeId).map(s=>s.id));
@@ -540,13 +620,146 @@ $('history-clear')?.addEventListener('click',()=>{
   refreshHistoryList();refreshHistoryClearButton();
 });
 $('history-btn')?.addEventListener('click',()=>{
-  const activeId=getActiveProfileId();
+  const activeId=effectiveProfileId();
   const profile=activeId?loadProfiles().find(p=>p.id===activeId):null;
   $('history-subtitle').textContent=profile?`Sessions for ${profile.name}`:'';
   pendingHistoryDeleteId=null;pendingHistoryClear=false;
   refreshHistoryList();refreshHistoryClearButton();
   try{$('history-dialog').showModal();}catch(err){}
 });
+
+// --- PIN dialog: one number pad for choosing, entering and recovering PINs ---
+let pinStep=null, pinLockTimer=null;
+function setPinError(msg){const el=$('pin-error');if(!el)return;el.textContent=msg||'';el.hidden=!msg;}
+function closePinDialog(){pinStep=null;stopPinLockTimer();try{$('pin-dialog').close();}catch(e){}}
+function stopPinLockTimer(){if(pinLockTimer){try{clearInterval(pinLockTimer);}catch(e){}pinLockTimer=null;}}
+function refreshPinLock(){
+  const s=pinStep,seconds=s&&s.target?pinLockSeconds(s.target):0;
+  const locked=seconds>0;
+  $('pin-input').disabled=locked;$('pin-code-input').disabled=locked;$('pin-code-submit').disabled=locked;
+  for(const b of $('pin-pad').children)b.disabled=locked;
+  if(locked){
+    setPinError(`Too many tries. Please wait ${seconds} second${seconds===1?'':'s'}.`);
+    if(!pinLockTimer){try{pinLockTimer=setInterval(()=>{if(!pinStep){stopPinLockTimer();return;}refreshPinLock();},1000);}catch(e){}}
+  }else if(pinLockTimer){stopPinLockTimer();setPinError('');}
+}
+function showPinStep(step){
+  pinStep=step;
+  $('pin-avatar').textContent=step.avatar||'🔒';
+  $('pin-title').textContent=step.title;
+  $('pin-message').textContent=step.message||'';
+  $('pin-entry').hidden=!(step.kind==='enter'||step.kind==='choose');
+  $('pin-code-entry').hidden=step.kind!=='code';
+  $('pin-recovery').hidden=step.kind!=='recovery';
+  if(step.kind==='recovery')$('pin-recovery-code').textContent=step.code;
+  $('pin-forgot').hidden=!step.onForgot;
+  $('pin-forgot').textContent=step.forgotLabel||'Forgot PIN?';
+  $('pin-cancel').hidden=step.kind==='recovery';
+  $('pin-cancel').textContent=step.cancelLabel||'Cancel';
+  $('pin-input').value='';$('pin-code-input').value='';
+  setPinError('');
+  try{if(!$('pin-dialog').open)$('pin-dialog').showModal();}catch(e){}
+  refreshPinLock();
+  try{(step.kind==='code'?$('pin-code-input'):$('pin-input')).focus();}catch(e){}
+}
+function submitPin(pin){
+  const s=pinStep;if(!s||pin.length!==4)return;
+  if(s.kind==='choose'){
+    if(!s.first){s.first=pin;$('pin-input').value='';$('pin-message').textContent='Type the same 4 numbers again to check.';setPinError('');return;}
+    if(pin!==s.first){s.first=null;$('pin-input').value='';$('pin-message').textContent=s.message||'';setPinError('Those didn’t match. Let’s start again.');return;}
+    s.onChosen(makeSecret(pin));return;
+  }
+  if(s.kind==='enter'){
+    if(pinLockSeconds(s.target))return refreshPinLock();
+    if(s.check(pin)){clearPinFailures(s.target);s.onSuccess();return;}
+    recordPinFailure(s.target);$('pin-input').value='';
+    if(!pinLockSeconds(s.target))setPinError('That PIN isn’t right. Try again.');
+    refreshPinLock();
+  }
+}
+$('pin-input')?.addEventListener('input',e=>{const v=e.target.value.replace(/\D/g,'').slice(0,4);if(v!==e.target.value)e.target.value=v;if(v.length===4)submitPin(v);});
+$('pin-pad')?.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b||b.disabled)return;
+  const input=$('pin-input');
+  if(b.dataset.key==='back')input.value=input.value.slice(0,-1);
+  else if(input.value.length<4)input.value+=b.dataset.key;
+  if(input.value.length===4)submitPin(input.value);
+});
+function submitRecoveryCode(){
+  const s=pinStep;if(!s||s.kind!=='code')return;
+  if(pinLockSeconds(s.target))return refreshPinLock();
+  if(s.check($('pin-code-input').value)){clearPinFailures(s.target);s.onSuccess();return;}
+  recordPinFailure(s.target);$('pin-code-input').value='';
+  if(!pinLockSeconds(s.target))setPinError('That code isn’t right. Check it and try again.');
+  refreshPinLock();
+}
+$('pin-code-submit')?.addEventListener('click',submitRecoveryCode);
+$('pin-code-input')?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitRecoveryCode();}});
+$('pin-ack')?.addEventListener('click',()=>{const s=pinStep;if(s&&s.onAck)s.onAck();});
+$('pin-forgot')?.addEventListener('click',()=>{const s=pinStep;if(s&&s.onForgot)s.onForgot();});
+function cancelPinStep(){const s=pinStep;if(s&&s.onCancel)s.onCancel();else closePinDialog();}
+$('pin-cancel')?.addEventListener('click',cancelPinStep);
+$('pin-dialog')?.addEventListener('cancel',e=>{e.preventDefault();if(pinStep&&pinStep.kind!=='recovery')cancelPinStep();});
+
+// Grown-up PIN: set once, then it opens any child and resets forgotten child PINs.
+function setGrownupPin(onDone,onCancel){
+  showPinStep({kind:'choose',avatar:'🔑',title:'Set a grown-up PIN',
+    message:'For a parent or teacher — don’t share it with children. It opens any child’s profile and resets a forgotten PIN. It keeps brothers and sisters out of each other’s profiles, but it isn’t protection against someone using browser developer tools.',
+    onChosen:pin=>{
+      const code=makeRecoveryCode();
+      saveGrownup({pin,recovery:makeSecret(normalizeCode(code))});
+      showPinStep({kind:'recovery',avatar:'📝',title:'Write down this recovery code',
+        message:'If the grown-up PIN is ever forgotten, this code lets you set a new one. It is only shown now, and each code works once.',
+        code,onAck:onDone});
+    },onCancel});
+}
+function ensureGrownupPin(onReady,onCancel){if(loadGrownup())onReady();else setGrownupPin(onReady,onCancel);}
+function askGrownupPin(message,onOk,onCancel){
+  showPinStep({kind:'enter',target:'grownup',avatar:'🔑',title:'Grown-up PIN',message,
+    check:pin=>checkSecret((loadGrownup()||{}).pin,pin),onSuccess:onOk,
+    forgotLabel:'Forgot grown-up PIN?',onForgot:()=>recoverGrownupPin(onOk,onCancel),onCancel});
+}
+function recoverGrownupPin(onOk,onCancel){
+  showPinStep({kind:'code',target:'recovery',avatar:'📝',title:'Enter the recovery code',
+    message:'Use the code you wrote down when the grown-up PIN was set. If it’s lost, clearing this site’s data in the browser settings starts fresh — but that removes every profile and all history on this device.',
+    check:code=>checkSecret((loadGrownup()||{}).recovery,normalizeCode(code)),
+    onSuccess:()=>setGrownupPin(onOk,onCancel),onCancel});
+}
+// Child PINs.
+function chooseChildPin(child,onChosen,onCancel){
+  showPinStep({kind:'choose',avatar:child.avatar,title:`Choose a PIN for ${child.name}`,
+    message:'Pick 4 numbers you’ll remember. You’ll need them to open your profile.',onChosen,onCancel});
+}
+function savePinFor(id,pin){const list=loadProfiles(),p=list.find(x=>x.id===id);if(p){p.pin=pin;saveProfiles(list);clearPinFailures(id);}}
+// Either the child's own PIN or the grown-up PIN opens a child's profile.
+function askChildPin(p,onOk,onCancel,opts={}){
+  showPinStep({kind:'enter',target:p.id,avatar:p.avatar,title:opts.title||`Hi ${p.name}! Enter your PIN`,message:opts.message||'',
+    check:pin=>checkSecret(p.pin,pin)||checkSecret((loadGrownup()||{}).pin,pin),onSuccess:onOk,
+    onForgot:()=>askGrownupPin(`Ask a grown-up to enter the grown-up PIN, then choose a new PIN for ${p.name}. ${p.name}’s history is kept.`,
+      ()=>chooseChildPin(p,pin=>{savePinFor(p.id,pin);onOk();},onCancel),onCancel),
+    cancelLabel:opts.cancelLabel,onCancel});
+}
+// Editing or deleting another child's profile needs that child's PIN or the grown-up PIN.
+function authorizeProfile(id,onOk){
+  const p=loadProfiles().find(x=>x.id===id);if(!p)return;
+  if(!profileHasPin(p)||(getActiveProfileId()===id&&isProfileUnlocked(id)))return onOk();
+  askChildPin(p,onOk,closePinDialog,{title:`Enter ${p.name}’s PIN`,message:'Or ask a grown-up to enter the grown-up PIN.'});
+}
+$('profile-pin-btn')?.addEventListener('click',()=>{
+  const p=loadProfiles().find(x=>x.id===editingProfileId);if(!p)return;
+  ensureGrownupPin(()=>chooseChildPin(p,pin=>{savePinFor(p.id,pin);closePinDialog();startEditProfile(p.id);refreshProfilesList();updateSaveStatus();},closePinDialog),closePinDialog);
+});
+$('pin-nudge')?.addEventListener('click',()=>{
+  const id=effectiveProfileId(),p=id&&loadProfiles().find(x=>x.id===id);if(!p)return;
+  ensureGrownupPin(()=>chooseChildPin(p,pin=>{savePinFor(p.id,pin);setUnlockedId(p.id);closePinDialog();refreshProfileBar();updateSaveStatus();},closePinDialog),closePinDialog);
+});
+// Reopening the app asks the active child for their PIN again.
+function askPinOnOpen(){
+  const id=getActiveProfileId(),p=id&&loadProfiles().find(x=>x.id===id);
+  if(!p||!profileHasPin(p)||getUnlockedId()===id)return;
+  askChildPin(p,()=>{closePinDialog();setUnlockedId(id);refreshProfileBar();updateSaveStatus();},
+    ()=>{closePinDialog();changeActiveProfile(null);refreshProfileBar();},{cancelLabel:'Practice as Guest'});
+}
 
 function updateLevelHelp(){
   const technique=AbacusTechniques.levels[$('level').value];
@@ -572,5 +785,5 @@ $('reveal').addEventListener('click',()=>{revealed=!revealed;$('reveal').textCon
 $('questions').addEventListener('input',e=>{if(!e.target.id.startsWith('a-'))return;const i=Number(e.target.id.slice(2));$(`card-${i}`).className='card';if(!revealed)$(`f-${i}`).textContent='';$('summary').textContent='';applyView();updateAbacusBeads(e.target.value);updateProgress();if(e.target.value.trim())playTone([[880,0.045]],0.09);ensureSession();syncSession();});
 $('questions').addEventListener('focusin',e=>{if(e.target.matches&&e.target.matches('.answer input'))updateAbacusBeads(e.target.value);});
 $('questions').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const next=Number(e.target.id.slice(2))+1;if(next<questions.length){if(viewMode==='focus')goToQuestion(next);else $(`a-${next}`).focus();}else check();}});
-$('print').addEventListener('click',()=>window.print());generate();
+$('print').addEventListener('click',()=>window.print());generate();askPinOnOpen();
 if(document.modelContext?.registerTool){try{Promise.resolve(document.modelContext.registerTool({name:'generate_abacus_practice',description:'Replace the current sheet with new abacus questions using the chosen digits, rows, and operation.',inputSchema:{type:'object',properties:{digits:{type:'integer',minimum:1,maximum:4},rows:{type:'integer',minimum:2,maximum:100},questions:{type:'integer',minimum:1,maximum:30},mode:{type:'string',enum:['add','mixed']},level:{type:'string',enum:['free','direct','five','ten','combined']}},required:['digits','rows','questions','mode'],additionalProperties:false},annotations:{readOnlyHint:false},execute(input){if(!input||!Number.isInteger(input.digits)||input.digits<1||input.digits>4||!Number.isInteger(input.rows)||input.rows<2||input.rows>100||!Number.isInteger(input.questions)||input.questions<1||input.questions>30||!['add','mixed'].includes(input.mode)||(input.level!==undefined&&!Object.hasOwn(AbacusTechniques.levels,input.level)))throw Error('Invalid practice settings');AbacusTechniques.validate(input.digits,input.rows,input.mode,input.level||'free');$('level').value=input.level||'free';updateLevelHelp();digit=input.digits;$('rows').value=input.rows;$('count').value=input.questions;$('mode').value=input.mode;for(const b of $('digits').children)b.setAttribute('aria-pressed',String(Number(b.dataset.digit)===digit));generate();return {digits:digit,rows:input.rows,questions:questions.length,mode:input.mode,level:$('level').value};}})).catch(()=>{});}catch{}}
