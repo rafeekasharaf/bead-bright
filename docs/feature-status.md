@@ -12,6 +12,7 @@
 | F04 | Local child profiles | Done |
 | F05 + F06 | Per-profile practice history and resume | Done |
 | profile-pins release | Delete history, child PINs with grown-up PIN, New practice in results box | Done |
+| F03 | Timed practice (count up, countdown, pause/resume) | Done |
 
 ## U00 — Practice technique guide
 
@@ -567,3 +568,64 @@ The owner's production data (one profile with its history) was backed up inside 
 - On shorter phones the grown-up setup screen is tall and may need a little scrolling inside the dialog.
 - Screen reader behaviour of the PIN dialog; a real phone; an installed home-screen app (its storage may be separate from the browser's).
 - A real locked-out wait (the lockout was tested by moving the stored lock time, not by waiting).
+
+## F03 — Timed practice
+
+**Status:** Done (2026-09-27)
+
+**Approval scope:** Preview and production. Claude checked the final preview (https://bead-bright-4tynjjtes-rafeekasharafs-projects.vercel.app) in Chrome before merging.
+
+**Commits** (fast-forwarded onto `main` from `a200e08`):
+
+- `dc95063` — F03: timed practice (from `0009-F03-timed-practice.patch`).
+- `a8cb23d` — Full stop before the time in the finish message, and a "⏳ 1 minute left" note for countdowns (owner's request).
+- `7dcd268` — Show the 1-minute note at once if the countdown is already in its last minute when its timers are set.
+
+**Deployment:**
+
+- Production: https://bead-bright.vercel.app/practice.html
+- Vercel deployment: https://bead-bright-fyng653n5-rafeekasharafs-projects.vercel.app
+
+### What changed
+
+- "Timing (optional)" setting: **Off** (default, practice unchanged), **Count up (stopwatch)**, or **Countdown** (1–60 minutes, default 10).
+- No running clock is shown while practicing: a quiet bar says "⏱ Timing on" / "⏱ Timing paused" with Pause/Resume, and "⏱ Finished in …" at the end.
+- Time is measured from timestamps, so pausing genuinely stops it; a resumed saved session always starts paused, so time away never counts.
+- Countdown: when time runs out the sheet is checked automatically, every answer box locks, and the message starts "⏰ Time's up!". When a minute remains (countdowns longer than 1 minute), the bar shows "⏳ 1 minute left" in amber, announced once to screen readers; a paused variant reads "⏳ 1 minute left · paused".
+- The finish message adds the time with a full stop, e.g. "1 of 3 correct. You took 3s."
+- Timed sessions save their time; History shows it next to the session (e.g. "· ⏱ 4s").
+- Service worker cache `bead-bright-v16-countdown-note` (the patch's v15 was bumped again by the follow-up change); adds `tests/timing.cjs`.
+
+### Test results
+
+Ran every test in `tests/README.md` on Node v22.11.0 (Windows), on `7dcd268` before merging — all pass:
+
+| Check | Result |
+| --- | --- |
+| `node --check app.js` / `techniques.js` / `sw.js` / `pwa.js` | Pass |
+| `node tests/techniques.cjs` | Pass — 3,520 question sequences |
+| `node tests/interactive.cjs`, `pwa-assets.cjs`, `mobile-default-view.cjs`, `profiles.cjs`, `history.cjs`, `pins.cjs`, `ui.cjs` | Pass |
+| `node tests/timing.cjs` (new; adds full-stop, 1-minute note and scheduling checks, confirmed failing against the code before each change) | Pass |
+
+Browser checks (Chrome):
+
+| Check | Preview | Production |
+| --- | --- | --- |
+| `/sw.js` serves `bead-bright-v16-countdown-note` | Pass | Pass (old cache replaced after one reload) |
+| `/tests/` and `/tests/timing.cjs` return 404 | — | Pass |
+| Production `practice.html`, `app.js`, `sw.js` identical to `7dcd268` | — | Pass |
+| Count up: bar shows only "⏱ Timing on", no ticking numbers | Pass | Pass |
+| Pause/Resume: 7s of real time with 3s paused recorded as 4s ("All 3 correct. Great work! You took 4s.") | Pass (similar) | Pass |
+| Countdown of 1 minute left to expire with no interaction: "⏰ Time's up! 1 of 3 correct · 2 to try. You took 1m 1s.", every answer box locked | — | Pass (real 1-minute wait) |
+| "⏳ 1 minute left" note in amber, only digit shown is that fixed "1" | Pass | — (covered by tests) |
+| Full stop before the time when not all correct ("2 of 3 correct. You took 3s.") | Pass | Pass |
+| History shows the duration next to each timed session ("⏱ 1m 1s", "⏱ 4s") | — | Pass |
+
+The owner's production browser data was backed up inside the browser before testing and restored exactly afterwards. At backup time it held no profiles, an empty history and a grown-up PIN; that is what was restored, and the test profile, sessions and backup copy were removed.
+
+### Notes and untested
+
+- A countdown that runs out reports a time a second or so over the limit (e.g. "1m 1s" for a 1-minute countdown), because the check runs just after the deadline and background tabs can delay timers.
+- A countdown can be paused at any time, so it is not a strict test.
+- The Timing choice returns to Off after a reload; only resumed sessions restore their timing.
+- Real phone, screen reader announcement of the 1-minute note, and an installed home-screen app are untested.
