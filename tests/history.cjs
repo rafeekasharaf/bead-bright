@@ -348,4 +348,15 @@ function historyRows(document) {
   assert.match(status().text, /Guest practice isn’t saved/, 'switching to Guest updates the status');
 }
 
-console.log('History checks passed: save status line for guest, pending, saved, failed, review and resume, switching child starts a fresh sheet and keeps answers separate per child, guest mode saves nothing, first answer creates one session and further typing updates it in place, finished status tracks whether every question was answered, abandoning a sheet leaves the old session untouched and does not record an untouched new one, resuming restores exact questions/answers and continues the same session, viewing a finished session is read-only and non-mutating, the banner dismiss action exits review/resume cleanly, deleting a profile deletes its history, and history rolls over at a 50-session cap.');
+// The History button's chip style sets display, which would override the browser's
+// default hiding; a [hidden] rule must win so Guests never see the button.
+{
+  const {document} = load();
+  const $ = $$(document);
+  assert.equal($('history-btn').hidden, true, 'History is hidden for Guest');
+  const css = Array.from(document.querySelectorAll('style')).map(st => st.textContent).join('');
+  assert.ok($('history-btn').classList.contains('profile-chip'), 'History uses the chip style');
+  assert.ok(css.includes('.profile-chip[hidden]{display:none}'), 'a hidden profile chip must not be displayed');
+}
+
+console.log('History checks passed: History button stays hidden for Guest, save status line for guest, pending, saved, failed, review and resume, switching child starts a fresh sheet and keeps answers separate per child, guest mode saves nothing, first answer creates one session and further typing updates it in place, finished status tracks whether every question was answered, abandoning a sheet leaves the old session untouched and does not record an untouched new one, resuming restores exact questions/answers and continues the same session, viewing a finished session is read-only and non-mutating, the banner dismiss action exits review/resume cleanly, deleting a profile deletes its history, and history rolls over at a 50-session cap.');
