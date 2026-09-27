@@ -114,7 +114,9 @@ function applyView(){
       Array.from(q.children).forEach((card,i)=>card.classList.toggle('is-current',i===focusIndex));
       $('focus-position').textContent=`Question ${focusIndex+1} of ${total}`;
       $('focus-prev').disabled=focusIndex===0;
-      $('focus-next').textContent=focusIndex===total-1?'Finish ✔':'Next ▶';
+      const isLast=focusIndex===total-1,nextBtn=$('focus-next');
+      nextBtn.querySelector('.nav-icon').textContent=isLast?'✔':'▶';
+      nextBtn.querySelector('.nav-label').textContent=isLast?'Finish':'Next';
     } else {
       q.classList.remove('is-focused');nav.hidden=true;
     }
