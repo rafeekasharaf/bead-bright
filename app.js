@@ -219,8 +219,8 @@ function retryMistakes(){
   const idx=wrongOrBlankIndices();if(!idx.length)return;
   const sourceId=currentSessionId||reviewingSessionId;
   const level=$('level').value,rows=Number($('rows').value),mode=$('mode').value;
+  // The child's "Number of questions" setting is left alone: only this sheet is shorter.
   questions=idx.map(i=>({values:questions[i].values.slice(),total:questions[i].total}));
-  $('count').value=questions.length;
   renderSheet(level,rows,mode);
   retryOfSessionId=sourceId;
   startFreshTiming();

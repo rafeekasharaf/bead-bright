@@ -58,7 +58,9 @@ question would fail this check — leaving them freshly unanswered and
 editable; a touched retry sheet gets its own history entry tagged with the
 session it retries and shows a "↩ Retry ·" badge in the history list; and
 retrying works identically when started from a reopened, read-only finished
-session (which has no live in-progress session to fall back on for the tag).
+session (which has no live in-progress session to fall back on for the tag)
+or from the results box; and a retry never changes the "Number of questions"
+setting, so the next New practice is full size.
 
 `tests/history.cjs` uses the same Linkedom harness as `tests/profiles.cjs`
 (plus a `showModal`/`close` stub for both dialogs it uses) to cover

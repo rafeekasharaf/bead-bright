@@ -86,11 +86,33 @@ function questionSignature(document, i) {
   assert.equal($('retry-mistakes-btn').textContent, `Retry the ${count - 1} you missed`);
 
   click(document, 'retry-mistakes-btn');
-  assert.equal(Number($('count').value), count - 1, 'the retry sheet has exactly the missed questions');
+  assert.equal($('questions').children.length, count - 1, 'the retry sheet has exactly the missed questions');
   const signaturesAfter = Array.from({length: count - 1}, (_, i) => questionSignature(document, i));
   assert.deepEqual(signaturesAfter, signaturesBefore.slice(1), 'retried questions must be the exact originals (index 0 dropped, the rest in order), not newly generated ones');
   assert.equal($('a-0').value, '', 'the retry sheet starts unanswered');
   assert.equal($('retry-mistakes-btn').hidden, true, 'a brand-new unfinished sheet has no retry button yet');
+  // Retrying never changes the child's settings: the next New practice is full size.
+  assert.equal(Number($('count').value), count, '"Number of questions" is unchanged by a retry');
+  document.getElementById('settings').dispatchEvent(Ev(document)('submit', {cancelable: true}));
+  assert.equal($('questions').children.length, count, 'the next New practice has the full number of questions');
+}
+
+// Retrying from the results box's own button behaves the same way.
+{
+  const {document, context} = load();
+  const $ = $$(document);
+  vm.runInContext("viewMode='focus';applyView();", context);
+  const count = Number($('count').value);
+  for (let i = 0; i < count; i++) type(document, `a-${i}`, String(rowTotal(document, i) + (i < 2 ? 1 : 0)));
+  click(document, 'check');
+  assert.equal($('focus-results').hidden, false);
+  assert.equal($('results-retry').hidden, false);
+  assert.equal($('results-retry').textContent, 'Retry the 2 you missed');
+  click(document, 'results-retry');
+  assert.equal($('focus-results').hidden, true, 'the results box closes');
+  assert.equal($('questions').children.length, 2);
+  assert.equal(Number($('count').value), count, 'settings unchanged');
+  click(document, 'results-new');
 }
 
 // A retry sheet, once touched, gets its own history entry tagged as a retry
@@ -149,4 +171,4 @@ function questionSignature(document, i) {
   assert.equal(retrySession.retryOf, originalSessionId, 'retrying from a reopened history session must still tag the original');
 }
 
-console.log('Retry checks passed: the button stays hidden until finished and hides again when nothing was missed, an eligible finish shows an accurate missed-count label, retrying reuses the exact original questions (not freshly generated ones) leaving them unanswered, a touched retry sheet gets its own history entry tagged with the session it retries and shows a badge in the history list, and retrying works identically from a reopened read-only finished session.');
+console.log('Retry checks passed: the button stays hidden until finished and hides again when nothing was missed, an eligible finish shows an accurate missed-count label, retrying reuses the exact original questions (not freshly generated ones) leaving them unanswered, a touched retry sheet gets its own history entry tagged with the session it retries and shows a badge in the history list, retrying works identically from a reopened read-only finished session and from the results box, and never changes the Number of questions setting.');
