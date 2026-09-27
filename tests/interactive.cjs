@@ -74,4 +74,16 @@ assert.equal($('mini-abacus').querySelectorAll('.bead.active').length,1+2+3+4+1)
 const css=document.querySelector('style').textContent;
 assert.doesNotMatch(css,/\.card\{[^}]*opacity:0/,'base .card rule must not hide cards');
 
-console.log('Interactive checks passed: progress indicator, mini abacus render and sizing, one-at-a-time navigation, digit-length rebuild, view reset on new sheet, visible checked cards.');
+// In one-at-a-time view, typing an answer must not hide the current card before Next/Check is pressed.
+$('digits').children[0].dispatchEvent(new window.Event('click',{bubbles:true}));
+$('rows').value='5';
+submit();
+if(!$('questions').classList.contains('is-focused'))$('view-toggle').dispatchEvent(new window.Event('click'));
+assert.equal($('questions').classList.contains('is-focused'),true);
+assert.equal($('questions').children[0].classList.contains('is-current'),true);
+$('a-0').value='4';
+$('a-0').dispatchEvent(new window.Event('input',{bubbles:true}));
+assert.equal($('questions').children[0].classList.contains('is-current'),true,'current card must stay visible while typing, before Next/Check');
+if($('questions').classList.contains('is-focused'))$('view-toggle').dispatchEvent(new window.Event('click')); // back to worksheet view for any later tests
+
+console.log('Interactive checks passed: progress indicator, mini abacus render and sizing, one-at-a-time navigation, digit-length rebuild, view reset on new sheet, visible checked cards, card stays visible while typing in focus view.');

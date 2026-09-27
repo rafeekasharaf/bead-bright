@@ -64,7 +64,7 @@ function buildAbacusBase(n){
   try{
     n=Math.max(1,Math.min(MAX_RODS,n||1));
     const svg=$('mini-abacus');if(!svg)return;
-    const rodW=60,padTop=14,barY=46,h=100,totalW=n*rodW+40;
+    const rodW=60,padTop=14,barY=46,h=116,totalW=n*rodW+40;
     svg.setAttribute('viewBox',`0 0 ${totalW} ${h}`);
     let html=`<line x1="4" y1="${barY}" x2="${totalW-4}" y2="${barY}" stroke="#172645" stroke-width="3"/>`;
     abacusRods=[];
@@ -157,7 +157,7 @@ $('settings').addEventListener('submit',e=>{e.preventDefault();try{generate();}c
 function check(){let correct=0,answered=0;questions.forEach((q,i)=>{const value=$(`a-${i}`).value.trim(),valid=/^\d+$/.test(value),ok=valid&&Number(value)===q.total;if(value)answered++;if(ok)correct++;const card=$(`card-${i}`);card.className='card'+(value?(ok?' good':' retry'):'');if(value)retrigger(card,ok?'pop':'shake');const f=$(`f-${i}`);f.className='feedback '+(ok?'correct':'incorrect');f.textContent=revealed?`Answer: ${q.total}`:!value?'Try this one':ok?'Correct!':'Try again';});$('summary').textContent=correct===questions.length?`All ${correct} correct. Great work!`:`${correct} of ${questions.length} correct${answered<questions.length?` · ${questions.length-answered} to try`:''}`;if(answered>0){if(correct===questions.length){playTone([[523,0.12],[659,0.12],[784,0.18]]);celebrate();}else if(correct<answered){playTone([[300,0.14]]);}}updateProgress();applyView();return {correct,total:questions.length};}
 $('check').addEventListener('click',check);
 $('reveal').addEventListener('click',()=>{revealed=!revealed;$('reveal').textContent=revealed?'Hide answers':'Show answers';questions.forEach((q,i)=>{$(`f-${i}`).textContent=revealed?`Answer: ${q.total}`:'';$(`f-${i}`).className='feedback';});});
-$('questions').addEventListener('input',e=>{if(!e.target.id.startsWith('a-'))return;const i=Number(e.target.id.slice(2));$(`card-${i}`).className='card';if(!revealed)$(`f-${i}`).textContent='';$('summary').textContent='';updateAbacusBeads(e.target.value);updateProgress();if(e.target.value.trim())playTone([[880,0.045]],0.09);});
+$('questions').addEventListener('input',e=>{if(!e.target.id.startsWith('a-'))return;const i=Number(e.target.id.slice(2));$(`card-${i}`).className='card';if(!revealed)$(`f-${i}`).textContent='';$('summary').textContent='';applyView();updateAbacusBeads(e.target.value);updateProgress();if(e.target.value.trim())playTone([[880,0.045]],0.09);});
 $('questions').addEventListener('focusin',e=>{if(e.target.matches&&e.target.matches('.answer input'))updateAbacusBeads(e.target.value);});
 $('questions').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const next=Number(e.target.id.slice(2))+1;if(next<questions.length){if(viewMode==='focus')goToQuestion(next);else $(`a-${next}`).focus();}else check();}});
 $('print').addEventListener('click',()=>window.print());generate();
