@@ -337,4 +337,14 @@ const historyIn = store => JSON.parse(store['bead-bright-history-v1'] || '{}');
   assert.equal(h2.$('history-btn').hidden, false);
 }
 
+// The number pad must not move while a child types: the confirm hint and the
+// error line each keep their own space whether or not they show text.
+{
+  const {document} = load({});
+  const css = Array.from(document.querySelectorAll('style')).map(s => s.textContent).join('');
+  assert.ok(css.includes('.pin-hint{min-height:'), 'the confirm hint reserves its line');
+  assert.ok(css.includes('#pin-error{min-height:'), 'the error line reserves its space');
+  assert.equal(document.getElementById('pin-error').hidden, false, 'the error line is never hidden, only emptied');
+}
+
 console.log('PIN checks passed: SHA-256 matches Node, PINs stored only as salted hashes, grown-up setup with one-time recovery code, cancel adds nobody, wrong PIN never switches, grown-up PIN opens any child, 30s-then-longer lockout, re-ask on reopen but not on same-visit reload, nothing saved while locked, child and grown-up forgot-PIN flows, edit/delete protection, and older profiles without PINs.');

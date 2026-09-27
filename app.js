@@ -630,7 +630,8 @@ $('history-btn')?.addEventListener('click',()=>{
 
 // --- PIN dialog: one number pad for choosing, entering and recovering PINs ---
 let pinStep=null, pinLockTimer=null;
-function setPinError(msg){const el=$('pin-error');if(!el)return;el.textContent=msg||'';el.hidden=!msg;}
+// The error line always keeps its space, so an error never shifts the number pad.
+function setPinError(msg){const el=$('pin-error');if(!el)return;el.textContent=msg||'';}
 function closePinDialog(){pinStep=null;stopPinLockTimer();try{$('pin-dialog').close();}catch(e){}}
 function stopPinLockTimer(){if(pinLockTimer){try{clearInterval(pinLockTimer);}catch(e){}pinLockTimer=null;}}
 function refreshPinLock(){
