@@ -656,7 +656,7 @@ function showPinStep(step){
   $('pin-forgot').textContent=step.forgotLabel||'Forgot PIN?';
   $('pin-cancel').hidden=step.kind==='recovery';
   $('pin-cancel').textContent=step.cancelLabel||'Cancel';
-  $('pin-input').value='';$('pin-code-input').value='';
+  $('pin-input').value='';$('pin-code-input').value='';$('pin-hint').textContent='';
   setPinError('');
   try{if(!$('pin-dialog').open)$('pin-dialog').showModal();}catch(e){}
   refreshPinLock();
@@ -665,8 +665,8 @@ function showPinStep(step){
 function submitPin(pin){
   const s=pinStep;if(!s||pin.length!==4)return;
   if(s.kind==='choose'){
-    if(!s.first){s.first=pin;$('pin-input').value='';$('pin-message').textContent='Type the same 4 numbers again to check.';setPinError('');return;}
-    if(pin!==s.first){s.first=null;$('pin-input').value='';$('pin-message').textContent=s.message||'';setPinError('Those didn’t match. Let’s start again.');return;}
+    if(!s.first){s.first=pin;$('pin-input').value='';$('pin-hint').textContent='Type the same 4 numbers again to check.';setPinError('');return;}
+    if(pin!==s.first){s.first=null;$('pin-input').value='';$('pin-hint').textContent='';setPinError('Those didn’t match. Let’s start again.');return;}
     s.onChosen(makeSecret(pin));return;
   }
   if(s.kind==='enter'){
