@@ -119,8 +119,9 @@ function applyView(){
     if(!q||!nav)return;
     const total=questions.length;
     if(viewMode==='focus'&&total>0){
-      q.classList.add('is-focused');nav.hidden=false;
-      if(resultsBtn)resultsBtn.hidden=!hasResults;
+      const panelOpen=q.classList.contains('showing-results');
+      q.classList.add('is-focused');nav.hidden=panelOpen;
+      if(resultsBtn)resultsBtn.hidden=!hasResults||panelOpen;
       if(focusIndex>=total)focusIndex=total-1;
       if(focusIndex<0)focusIndex=0;
       Array.from(q.children).forEach((card,i)=>card.classList.toggle('is-current',i===focusIndex));
@@ -164,7 +165,9 @@ function showResultsPanel(){
     $('questions').classList.add('showing-results');
     $('focus-nav').hidden=true;
     $('focus-results').hidden=false;
-    $('focus-results-btn').hidden=false;
+    $('focus-results-btn').hidden=true;
+    // Move focus to the summary so keyboard and screen-reader users land on the results.
+    $('results-summary').focus();
   }catch(e){}
 }
 function hideResultsPanel(){
@@ -178,7 +181,7 @@ $('results-grid')?.addEventListener('click',e=>{
   const b=e.target.closest('.result-chip');if(!b)return;
   hideResultsPanel();goToQuestion(Number(b.dataset.i));
 });
-$('results-continue')?.addEventListener('click',hideResultsPanel);
+$('results-continue')?.addEventListener('click',()=>{hideResultsPanel();const input=$(`a-${focusIndex}`);if(input)input.focus();});
 $('focus-results-btn')?.addEventListener('click',showResultsPanel);
 $('view-toggle')?.addEventListener('click',()=>{
   viewMode=viewMode==='sheet'?'focus':'sheet';

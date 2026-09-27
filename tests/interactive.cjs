@@ -9,6 +9,9 @@ for (const select of document.querySelectorAll('select')) {
   let value = select.querySelector('option[selected]')?.value ?? select.querySelector('option').value;
   Object.defineProperty(select, 'value', {get:()=>value, set:next=>{value=next;}});
 }
+// Linkedom does not track focus either; record the last focused element's id.
+let focusedId = null;
+window.HTMLElement.prototype.focus = function () { focusedId = this.id; };
 const A = require('../techniques.js');
 const context = vm.createContext({document, window, AbacusTechniques:A, console});
 vm.runInContext(fs.readFileSync(path.join(root, 'app.js'), 'utf8'), context);
@@ -122,10 +125,27 @@ assert.equal(chips.length,3);
 assert.equal(chips[0].classList.contains('correct'),true);
 assert.equal(chips[1].classList.contains('wrong'),true);
 assert.equal(chips[2].classList.contains('blank'),true);
+// While the panel is open, "See results" is redundant and hidden, and focus
+// moves to the labelled summary so screen readers announce the results.
+assert.equal($('focus-results-btn').hidden,true,'See results must be hidden while the results panel is open');
+assert.equal($('focus-nav').hidden,true);
+assert.equal($('focus-results').getAttribute('role'),'region');
+assert.equal($('focus-results').getAttribute('aria-labelledby'),'results-summary');
+assert.equal(focusedId,'results-summary','opening results must move focus to the summary');
 // Clicking a chip jumps straight to that question and closes the results panel.
 chips[1].dispatchEvent(new window.Event('click',{bubbles:true}));
 assert.equal($('focus-results').hidden,true);
 assert.equal($('questions').children[1].classList.contains('is-current'),true);
+assert.equal($('focus-results-btn').hidden,false,'See results must reappear once the panel is closed');
+// Reopening shows the panel with focus on the summary; Keep practicing returns focus to the current answer.
+$('focus-results-btn').dispatchEvent(new window.Event('click'));
+assert.equal($('focus-results').hidden,false);
+assert.equal($('focus-results-btn').hidden,true);
+assert.equal(focusedId,'results-summary');
+$('results-continue').dispatchEvent(new window.Event('click'));
+assert.equal($('focus-results').hidden,true);
+assert.equal($('focus-results-btn').hidden,false);
+assert.equal(focusedId,'a-1','Keep practicing must return focus to the current question');
 if($('questions').classList.contains('is-focused'))$('view-toggle').dispatchEvent(new window.Event('click'));
 
 console.log('Interactive checks passed: progress indicator, mini abacus render and sizing, one-at-a-time navigation, digit-length rebuild, view reset on new sheet, visible checked cards, card stays visible while typing in focus view, sound defaults on, finish results panel and chip navigation.');
