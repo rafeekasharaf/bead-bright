@@ -13,6 +13,7 @@ node tests/mobile-default-view.cjs
 node tests/profiles.cjs
 node tests/history.cjs
 node tests/pins.cjs
+node tests/timing.cjs
 ```
 
 `tests/pins.cjs` covers child and grown-up PINs: the built-in SHA-256 matches
@@ -27,6 +28,20 @@ stops working); editing or deleting another child needs their PIN or the
 grown-up PIN; and older profiles without a PIN keep working with a nudge to
 add one. `tests/pin-helpers.cjs` is shared by the suites that create or
 switch profiles: it stubs `<dialog>` and answers PIN prompts.
+
+`tests/timing.cjs` covers optional timed practice: Off (the default) leaves
+untimed practice completely unaffected; Count up starts running as soon as a
+timed sheet is generated; pausing genuinely stops elapsed time from accruing
+and resuming continues from the paused total, not the wall clock; resuming a
+saved session after a simulated reload preserves only the real practice time
+(never a closed-tab gap) and always starts paused, requiring an explicit tap
+to continue; a countdown reaching its limit auto-finishes and locks every
+input even when some questions are still blank, both via the opportunistic
+check on user interaction and via the countdown's own scheduled timer firing
+for real with no interaction at all; and a finished timed session's duration
+shows up in the history list. Elapsed time is checked by mocking `Date.now`
+inside the suite's own realm, not by waiting in real time, except for one
+short real `setTimeout` that exercises the actual scheduled check end to end.
 
 `tests/history.cjs` uses the same Linkedom harness as `tests/profiles.cjs`
 (plus a `showModal`/`close` stub for both dialogs it uses) to cover

@@ -139,6 +139,7 @@ function applyView(){
   }catch(e){}
 }
 function goToQuestion(i){
+  if(checkCountdownExpiry())return;
   focusIndex=i;applyView();
   const card=$(`card-${i}`);if(card)retrigger(card,'q-enter');
   const input=$(`a-${i}`);if(input)input.focus();
@@ -209,6 +210,7 @@ function renderSheet(level,rows,mode){
   focusIndex=0;hasResults=false;reviewOnly=false;
   currentSessionId=null;currentSessionProfileId=null;lastSaveFailed=false;
   hideHistoryBanner();updateSaveStatus();
+  resetTiming();
   buildAbacusBase(abacusSize());updateAbacusBeads(0);updateProgress();applyView();
 }
 function generate(){
@@ -216,8 +218,106 @@ function generate(){
   if(!Number.isInteger(rows)||rows<2||rows>100||!Number.isInteger(count)||count<1||count>30)throw Error("Let's choose 2–100 rows and 1–30 questions, then we'll build your sheet.");
   questions=Array.from({length:count},()=>makeQuestion(digit,rows,mode,level));
   renderSheet(level,rows,mode);
+  startFreshTiming();
 }
 $('digits').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;digit=Number(b.dataset.digit);for(const item of $('digits').children)item.setAttribute('aria-pressed',String(item===b));buildAbacusBase(abacusSize());updateAbacusBeads(0);});
+
+// --- timed practice: elapsed time from timestamps, no ticking display ---
+$('timing-mode')?.addEventListener('change',()=>{
+  const field=$('countdown-minutes-field');if(field)field.hidden=$('timing-mode').value!=='countdown';
+});
+let timerState={mode:'off',startedAt:null,accumulatedMs:0,running:false,limitMs:null,finished:false};
+let countdownTimeout=null, timesUp=false;
+function elapsedMs(){
+  if(timerState.mode==='off')return 0;
+  return timerState.accumulatedMs+(timerState.running?Date.now()-timerState.startedAt:0);
+}
+function formatDuration(ms){
+  const totalSeconds=Math.max(0,Math.round(ms/1000));
+  const m=Math.floor(totalSeconds/60),s=totalSeconds%60;
+  return m>0?`${m}m ${s}s`:`${s}s`;
+}
+function clearCountdownTimeout(){
+  if(countdownTimeout){try{clearTimeout(countdownTimeout);}catch(e){}countdownTimeout=null;}
+}
+function scheduleCountdownCheck(){
+  clearCountdownTimeout();
+  if(typeof setTimeout!=='function')return;
+  if(timerState.mode!=='countdown'||!timerState.running||timerState.finished)return;
+  const remaining=timerState.limitMs-elapsedMs();
+  if(remaining<=0){triggerTimeUp();return;}
+  try{countdownTimeout=setTimeout(()=>{if(elapsedMs()>=timerState.limitMs)triggerTimeUp();else scheduleCountdownCheck();},remaining+50);}catch(e){}
+}
+function checkCountdownExpiry(){
+  if(timerState.mode==='countdown'&&timerState.running&&!timerState.finished&&elapsedMs()>=timerState.limitMs){triggerTimeUp();return true;}
+  return false;
+}
+function triggerTimeUp(){
+  if(timerState.finished||reviewOnly)return;
+  timesUp=true;
+  check();
+  questions.forEach((q,i)=>{const el=$(`a-${i}`);if(el)el.disabled=true;});
+}
+function updateTimingControl(){
+  const el=$('timing-control');if(!el)return;
+  if(timerState.mode==='off'){el.hidden=true;return;}
+  el.hidden=false;
+  const pauseBtn=$('timing-pause-btn');
+  if(reviewOnly||timerState.finished){
+    $('timing-status').textContent=`⏱ Finished in ${formatDuration(elapsedMs())}`;
+    if(pauseBtn)pauseBtn.hidden=true;
+  }else{
+    $('timing-status').textContent=timerState.running?'⏱ Timing on':'⏱ Timing paused';
+    if(pauseBtn){pauseBtn.hidden=false;pauseBtn.textContent=timerState.running?'Pause':'Resume';}
+  }
+}
+$('timing-pause-btn')?.addEventListener('click',()=>{
+  if(timerState.mode==='off'||timerState.finished||reviewOnly)return;
+  if(timerState.running){
+    timerState.accumulatedMs=elapsedMs();timerState.running=false;timerState.startedAt=null;
+    clearCountdownTimeout();
+  }else{
+    timerState.startedAt=Date.now();timerState.running=true;
+    if(timerState.mode==='countdown')scheduleCountdownCheck();
+  }
+  updateTimingControl();
+  if(currentSessionId)syncSession();
+});
+// A neutral baseline shared by both a fresh sheet and a restored one; the
+// caller decides how to initialize timing right after (see startFreshTiming
+// and restoreTiming below).
+function resetTiming(){
+  clearCountdownTimeout();
+  timesUp=false;
+  timerState={mode:'off',startedAt:null,accumulatedMs:0,running:false,limitMs:null,finished:false};
+  updateTimingControl();
+}
+function startFreshTiming(){
+  const mode=$('timing-mode')?$('timing-mode').value:'off';
+  if(mode==='off'){
+    timerState={mode:'off',startedAt:null,accumulatedMs:0,running:false,limitMs:null,finished:false};
+  }else{
+    const minutes=Math.max(1,Math.min(60,Number($('countdown-minutes').value)||10));
+    timerState={mode,startedAt:Date.now(),accumulatedMs:0,running:true,limitMs:mode==='countdown'?minutes*60000:null,finished:false};
+    if(mode==='countdown')scheduleCountdownCheck();
+  }
+  updateTimingControl();
+}
+// Resuming or reviewing a saved session always starts paused: a closed tab or
+// a long gap before coming back must never silently count as practice time.
+function restoreTiming(timing){
+  clearCountdownTimeout();
+  if(!timing||timing.mode==='off'){
+    timerState={mode:'off',startedAt:null,accumulatedMs:0,running:false,limitMs:null,finished:false};
+  }else{
+    timerState={mode:timing.mode,startedAt:null,accumulatedMs:timing.accumulatedMs||0,running:false,limitMs:timing.limitMs||null,finished:false};
+  }
+  if($('timing-mode'))$('timing-mode').value=timerState.mode;
+  const minutesField=$('countdown-minutes-field');
+  if(minutesField)minutesField.hidden=timerState.mode!=='countdown';
+  if(timerState.mode==='countdown'&&timerState.limitMs&&$('countdown-minutes'))$('countdown-minutes').value=String(Math.round(timerState.limitMs/60000));
+  updateTimingControl();
+}
 
 // --- PINs: stored only as salted hashes in this browser ---
 // This keeps brothers and sisters out of each other's profiles; it is not
@@ -500,7 +600,8 @@ function ensureSession(){
     settings:{digits:digit,rows:Number($('rows').value),count:questions.length,mode:$('mode').value,level:$('level').value},
     questions:questions.map(q=>({values:q.values,total:q.total})),
     answers:questions.map(()=>''),
-    focusIndex:0,finished:false
+    focusIndex:0,finished:false,
+    timing:{mode:timerState.mode,limitMs:timerState.limitMs,accumulatedMs:elapsedMs()}
   };
   currentSessionId=session.id;currentSessionProfileId=activeId;
   lastSaveFailed=!upsertSession(activeId,session);
@@ -513,6 +614,7 @@ function syncSession(finishedOverride){
   session.answers=questions.map((q,i)=>{const el=$(`a-${i}`);return el?el.value:'';});
   session.focusIndex=focusIndex;
   session.updatedAt=new Date().toISOString();
+  session.timing={mode:timerState.mode,limitMs:timerState.limitMs,accumulatedMs:elapsedMs()};
   if(finishedOverride!==undefined)session.finished=finishedOverride;
   lastSaveFailed=!upsertSession(currentSessionProfileId,session);
   updateSaveStatus();
@@ -532,10 +634,12 @@ function loadSessionIntoSheet(profileId,sessionId){
   $('rows').value=session.settings.rows;$('count').value=session.settings.count;$('mode').value=session.settings.mode;
   questions=session.questions.map(q=>({values:q.values.slice(),total:q.total}));
   renderSheet(session.settings.level,session.settings.rows,session.settings.mode);
+  restoreTiming(session.timing);
   questions.forEach((q,i)=>{const el=$(`a-${i}`);if(el)el.value=session.answers[i]||'';});
   updateProgress();
   if(session.finished){
     reviewOnly=true;
+    timerState.finished=true;
     questions.forEach((q,i)=>{const el=$(`a-${i}`);if(el)el.disabled=true;});
     check();
     showHistoryBanner(`Finished practice · ${formatDateTime(session.startedAt)}`);
@@ -566,7 +670,7 @@ function refreshHistoryList(){
     const dateSpan=document.createElement('span');dateSpan.className='history-row-date';dateSpan.textContent=formatDateTime(s.startedAt);
     const detailSpan=document.createElement('span');detailSpan.className='history-row-detail';
     const levelName=(AbacusTechniques.levels[s.settings.level]||{}).name||s.settings.level;
-    detailSpan.textContent=`${levelName} · ${s.settings.digits}-digit · ${s.settings.rows} rows · ${s.settings.count} questions`;
+    detailSpan.textContent=`${levelName} · ${s.settings.digits}-digit · ${s.settings.rows} rows · ${s.settings.count} questions`+(s.timing&&s.timing.mode!=='off'?` · ⏱ ${formatDuration(s.timing.accumulatedMs||0)}`:'');
     main.append(dateSpan,detailSpan);
     row.appendChild(main);
     const status=document.createElement('span');
@@ -786,10 +890,19 @@ $('level').addEventListener('change',()=>{
 });
 updateLevelHelp();
 $('settings').addEventListener('submit',e=>{e.preventDefault();try{generate();}catch(err){$('error').textContent=err.message;$('error').hidden=false;}});
-function check(){let correct=0,answered=0;questions.forEach((q,i)=>{const value=$(`a-${i}`).value.trim(),valid=/^\d+$/.test(value),ok=valid&&Number(value)===q.total;if(value)answered++;if(ok)correct++;const card=$(`card-${i}`);card.className='card'+(value?(ok?' good':' retry'):'');if(value)retrigger(card,ok?'pop':'shake');const f=$(`f-${i}`);f.className='feedback '+(ok?'correct':'incorrect');f.textContent=revealed?`Answer: ${q.total}`:!value?'Try this one':ok?'Correct!':'Try again';});$('summary').textContent=correct===questions.length?`All ${correct} correct. Great work!`:`${correct} of ${questions.length} correct${answered<questions.length?` · ${questions.length-answered} to try`:''}`;if(!reviewOnly&&answered>0){if(correct===questions.length){playTone([[523,0.12],[659,0.12],[784,0.18]]);celebrate();}else if(correct<answered){playTone([[300,0.14]]);}}updateProgress();applyView();if(answered>0&&viewMode==='focus')showResultsPanel();if(!reviewOnly){ensureSession();syncSession(answered===questions.length);}return {correct,total:questions.length};}
+function check(){let correct=0,answered=0;questions.forEach((q,i)=>{const value=$(`a-${i}`).value.trim(),valid=/^\d+$/.test(value),ok=valid&&Number(value)===q.total;if(value)answered++;if(ok)correct++;const card=$(`card-${i}`);card.className='card'+(value?(ok?' good':' retry'):'');if(value)retrigger(card,ok?'pop':'shake');const f=$(`f-${i}`);f.className='feedback '+(ok?'correct':'incorrect');f.textContent=revealed?`Answer: ${q.total}`:!value?'Try this one':ok?'Correct!':'Try again';});
+  const finishedNow=(answered===questions.length)||timesUp;
+  let timeText='';
+  if(finishedNow&&timerState.mode!=='off'&&!timerState.finished){
+    if(timerState.running){timerState.accumulatedMs=elapsedMs();timerState.running=false;timerState.startedAt=null;}
+    timerState.finished=true;clearCountdownTimeout();
+    timeText=` You took ${formatDuration(timerState.accumulatedMs)}.`;
+  }
+  $('summary').textContent=(timesUp?'⏰ Time\'s up! ':'')+(correct===questions.length?`All ${correct} correct. Great work!`:`${correct} of ${questions.length} correct${answered<questions.length?` · ${questions.length-answered} to try`:''}`)+timeText;
+  if(!reviewOnly&&answered>0){if(correct===questions.length){playTone([[523,0.12],[659,0.12],[784,0.18]]);celebrate();}else if(correct<answered){playTone([[300,0.14]]);}}updateProgress();applyView();if(answered>0&&viewMode==='focus')showResultsPanel();updateTimingControl();if(!reviewOnly){ensureSession();syncSession((answered===questions.length)||timesUp);}return {correct,total:questions.length};}
 $('check').addEventListener('click',check);
 $('reveal').addEventListener('click',()=>{revealed=!revealed;$('reveal').textContent=revealed?'Hide answers':'Show answers';questions.forEach((q,i)=>{$(`f-${i}`).textContent=revealed?`Answer: ${q.total}`:'';$(`f-${i}`).className='feedback';});});
-$('questions').addEventListener('input',e=>{if(!e.target.id.startsWith('a-'))return;const i=Number(e.target.id.slice(2));$(`card-${i}`).className='card';if(!revealed)$(`f-${i}`).textContent='';$('summary').textContent='';applyView();updateAbacusBeads(e.target.value);updateProgress();if(e.target.value.trim())playTone([[880,0.045]],0.09);ensureSession();syncSession();});
+$('questions').addEventListener('input',e=>{if(!e.target.id.startsWith('a-'))return;if(checkCountdownExpiry())return;const i=Number(e.target.id.slice(2));$(`card-${i}`).className='card';if(!revealed)$(`f-${i}`).textContent='';$('summary').textContent='';applyView();updateAbacusBeads(e.target.value);updateProgress();if(e.target.value.trim())playTone([[880,0.045]],0.09);ensureSession();syncSession();});
 $('questions').addEventListener('focusin',e=>{if(e.target.matches&&e.target.matches('.answer input'))updateAbacusBeads(e.target.value);});
 $('questions').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const next=Number(e.target.id.slice(2))+1;if(next<questions.length){if(viewMode==='focus')goToQuestion(next);else $(`a-${next}`).focus();}else check();}});
 $('print').addEventListener('click',()=>window.print());generate();askPinOnOpen();
