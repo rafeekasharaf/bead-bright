@@ -8,7 +8,14 @@ node --check techniques.js
 node --check sw.js
 node tests/techniques.cjs
 node tests/interactive.cjs
+node tests/pwa-assets.cjs
 ```
+
+`tests/pwa-assets.cjs` checks that every path `sw.js` precaches actually
+exists on disk, that both `index.html` (landing) and `practice.html` (the
+tool) are precached, and that the navigate handler looks up the requested
+page rather than always serving a hard-coded one — a static check, not a
+running Service Worker.
 
 `tests/interactive.cjs` uses the same Linkedom harness as `tests/ui.cjs` and covers
 the one-at-a-time practice view, the progress indicator, and the decorative

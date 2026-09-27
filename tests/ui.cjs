@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const {parseHTML} = require('linkedom');
 const root = path.resolve(__dirname, '..');
-const {window, document} = parseHTML(fs.readFileSync(path.join(root, 'index.html'), 'utf8'));
+const {window, document} = parseHTML(fs.readFileSync(path.join(root, 'practice.html'), 'utf8'));
 // Linkedom does not implement HTMLSelectElement.value assignment. Supply only
 // that browser behavior; generation and event listeners remain production code.
 for (const select of document.querySelectorAll('select')) {

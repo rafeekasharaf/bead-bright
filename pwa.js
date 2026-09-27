@@ -30,11 +30,12 @@
       try {
         await navigator.serviceWorker.register('/sw.js', {updateViaCache: 'none'});
         await navigator.serviceWorker.ready;
+        if (!status) return;
         const refreshStatus = () => { status.textContent = navigator.onLine ? 'Ready for offline practice' : 'Offline · Keep practicing'; };
         refreshStatus();
         window.addEventListener('online', refreshStatus);
         window.addEventListener('offline', refreshStatus);
-      } catch { status.textContent = 'Offline setup unavailable. You can still practice online.'; }
+      } catch { if (status) status.textContent = 'Offline setup unavailable. You can still practice online.'; }
     });
   }
 })();

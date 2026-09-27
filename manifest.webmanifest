@@ -4,7 +4,7 @@
   "short_name": "Bead Bright",
   "description": "Abacus practice with one to four digit numbers.",
   "lang": "en",
-  "start_url": "/",
+  "start_url": "/practice.html",
   "scope": "/",
   "display": "standalone",
   "background_color": "#f1f5ff",
