@@ -11,6 +11,7 @@
 | F01 | Question controls and saved presets | Not shipped — branch deleted before merge |
 | F04 | Local child profiles | Done |
 | F05 + F06 | Per-profile practice history and resume | Done |
+| profile-pins release | Delete history, child PINs with grown-up PIN, New practice in results box | Done |
 
 ## U00 — Practice technique guide
 
@@ -485,3 +486,84 @@ The owner's existing production profile was backed up before testing and restore
 - Real phone: History dialog, banner and status line at phone width.
 - Screen reader announcements of the save status.
 - Browser storage limits in practice (the failure message was tested with simulated full storage only).
+
+## profile-pins release — Delete history, child PINs, New practice in the results box
+
+**Status:** Done (2026-09-27)
+
+**Approval scope:** Preview and production. The owner tested the PIN preview ("tested working fine"), then approved the final preview with the results-box button (https://bead-bright-77ai4ep12-rafeekasharafs-projects.vercel.app).
+
+**Commits** (fast-forwarded onto `main` from `59ecb84`):
+
+- `e859407` — Delete practice history from the History popup: a 🗑️ per session and "Delete all history" for the current child, each with a two-tap confirm. Deleting the session for the sheet on screen stops saving into it.
+- `60c5b3b` — Child PINs with a grown-up PIN and recovery code.
+- `dce5cfe` — PIN pad: keep the pad still while confirming a new PIN (found in a real-tap browser check).
+- `9c5367c` — PIN pad: keep the pad still when an error appears (found in a real-tap browser check).
+- `01a70c8` — "New practice" button in the one-at-a-time results box, next to "Keep practicing".
+
+**Deployment:**
+
+- Production: https://bead-bright.vercel.app/practice.html
+- Vercel deployment: https://bead-bright-m6u3fo0fh-rafeekasharafs-projects.vercel.app
+
+### What changed
+
+**Child PINs** (decisions agreed with the owner: 4-digit number PIN; required for new profiles; ask again when the app is reopened; recovery code plus clear-data fallback):
+
+- Every new child chooses a 4-digit PIN (typed twice). The first one also sets up a grown-up PIN and shows a one-time recovery code that must be acknowledged.
+- Switching to a child needs their PIN or the grown-up PIN. Guest needs none.
+- Editing or deleting another child's profile needs that child's PIN or the grown-up PIN; the unlocked child can edit themselves.
+- The unlocked child lasts for the current visit (`sessionStorage`): a reload keeps it, closing and reopening asks again. While locked, History is hidden and nothing is saved.
+- Forgot a child PIN: the grown-up PIN resets it; the child's history is kept.
+- Forgot the grown-up PIN: the recovery code sets a new grown-up PIN and a new code (the old code stops working). If the code is lost, clearing the site's data starts fresh and removes all profiles and history on the device; the app explains this.
+- Five wrong tries lock the pad for 30 seconds, then 60, doubling up to 15 minutes.
+- PINs are stored only as salted SHA-256 hashes (1,000 rounds) in this browser (`bead-bright-grownup-v1`, `pin` on each profile, attempts in `bead-bright-pin-attempts-v1`). The setup screen says this stops brothers and sisters, not someone using browser developer tools.
+- Profiles made before PINs keep working without one and show "🔒 Add a PIN to protect <name>'s history".
+
+**Other:** service worker cache `bead-bright-v14-results-new-practice`; adds `tests/pins.cjs` and the shared `tests/pin-helpers.cjs`.
+
+### Test results
+
+Ran every test in `tests/README.md` on Node v22.11.0 (Windows), on `01a70c8` before merging — all pass:
+
+| Check | Result |
+| --- | --- |
+| `node --check app.js` / `techniques.js` / `sw.js` / `pwa.js` | Pass |
+| `node tests/techniques.cjs` | Pass — 3,520 question sequences |
+| `node tests/interactive.cjs` (adds the results-box New practice button) | Pass |
+| `node tests/pwa-assets.cjs` | Pass |
+| `node tests/mobile-default-view.cjs` | Pass |
+| `node tests/profiles.cjs` (now goes through PINs) | Pass |
+| `node tests/history.cjs` (adds history deleting; goes through PINs) | Pass |
+| `node tests/pins.cjs` (new) | Pass |
+| `node tests/ui.cjs` | Pass |
+
+`tests/pins.cjs` was mutation-checked: accepting any PIN, skipping the re-ask on reopen, skipping edit/delete protection, removing the lockout, and saving while locked each make it fail. New checks for history deleting and the results-box button were confirmed failing against the code before each change.
+
+Browser checks (Chrome):
+
+| Check | Preview | Production |
+| --- | --- | --- |
+| Grown-up setup → recovery code (must acknowledge) → child PIN, with real taps on the number pad | Pass | Pass (script) |
+| Pad does not move between the two entries or when an error appears | Pass (after two fixes) | Pass |
+| Wrong PIN refused; right PIN switches (real taps) | Pass | Pass |
+| No plain-text PINs in storage | Pass | Pass |
+| Reopening in a new tab asks for the PIN; History hidden; "Enter <name>'s PIN to save" | Pass | Pass |
+| Forgot child PIN → grown-up PIN → new child PIN | Pass | — |
+| Forgot grown-up PIN → recovery code (case/spacing tolerant) → new grown-up PIN and new code → new child PIN | Pass | Pass |
+| Editing another child asks for their PIN; Cancel leaves editing off | — | Pass |
+| History delete: one session (two taps), then Delete all (asks by name), popup shows empty state | Pass (real taps) | Pass |
+| Results box shows "Keep practicing" and "New practice"; New practice builds a fresh sheet on question 1, focus in the first answer, finished sheet kept in history | Pass (real tap) | Pass |
+| Phone width (390px): PIN dialog fits, keys 64×58px, no sideways scroll | Pass | — |
+| `/sw.js` serves `bead-bright-v14-results-new-practice`; old cache replaced after one reload | — | Pass |
+| `/tests/`, `/tests/pins.cjs`, `/tests/pin-helpers.cjs` return 404 | — | Pass |
+| Production `practice.html`, `app.js`, `sw.js` identical to `01a70c8` | — | Pass |
+| Existing production profile without a PIN: no prompt, nudge shown, History still available | — | Pass |
+
+The owner's production data (one profile with its history) was backed up inside the browser before testing and restored exactly afterwards; no test grown-up PIN, attempts or profiles remain.
+
+### Untested — spot-check manually
+
+- On shorter phones the grown-up setup screen is tall and may need a little scrolling inside the dialog.
+- Screen reader behaviour of the PIN dialog; a real phone; an installed home-screen app (its storage may be separate from the browser's).
+- A real locked-out wait (the lockout was tested by moving the stored lock time, not by waiting).
