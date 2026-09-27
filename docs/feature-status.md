@@ -10,6 +10,7 @@
 | sheet-improvements | Mobile-default one-at-a-time, sound on by default, results panel | Done |
 | F01 | Question controls and saved presets | Not shipped — branch deleted before merge |
 | F04 | Local child profiles | Done |
+| F05 + F06 | Per-profile practice history and resume | Done (one known bug, see below) |
 
 ## U00 — Practice technique guide
 
@@ -383,3 +384,79 @@ Test profiles were removed afterwards. The owner's existing profiles on the prev
 - Real phone: dialog layout, avatar picker and nickname keyboard at phone width.
 - Screen reader behaviour in the Profiles dialog.
 - Profiles on an installed home-screen app (storage is per browser/app, so profiles made in the browser may not appear in the installed app).
+
+## F05 + F06 — Per-profile practice history and resume
+
+**Status:** Done (2026-09-27), with one known bug open (see Known issues).
+
+**Approval scope:** Preview and production. The owner checked the preview that includes both follow-up fixes (https://bead-bright-p7bf3h95p-rafeekasharafs-projects.vercel.app) and approved it.
+
+**Commits** (fast-forwarded onto `main` from `9be1c0b`):
+
+- `9b2f9d2` — F05 + F06: per-profile practice history and resume (from `0008-F05-F06-history.patch`).
+- `9e8e479` — Switching profile starts a fresh sheet so history stays per child. Before this, a sheet stayed attached to whoever was active when it started, so after switching child (or to Guest) answers were saved into the previous child's session.
+- `cd412c1` — Save status line: shows whether the current sheet is being saved, and reports failed writes (e.g. full storage) instead of dropping them silently.
+
+**Deployment:**
+
+- Production: https://bead-bright.vercel.app/practice.html
+- Vercel deployment: https://bead-bright-csq0mvn4y-rafeekasharafs-projects.vercel.app
+
+### What changed
+
+- "📜 History" button next to the profile button, meant for an active profile only (see Known issues).
+- A sheet is saved automatically for the active child from their first typed answer; every answer, Check and Next updates the same session. There is no save button. Guest practice is not saved.
+- A session is marked Finished once every question has an answer and Check is pressed.
+- History list per child: date, technique, digits, rows, question count, and ✓ Finished / ↻ Unfinished. Unfinished sessions resume with the same questions and answers; finished ones open read-only. A banner shows "Resuming practice from…" or "Finished practice ·…" with "Start new practice".
+- Up to 50 sessions per child (oldest dropped first); deleting a profile deletes its history.
+- Switching to a different child, to Guest, adding a profile, or deleting the active profile starts a fresh sheet; the previous child's sheet stays in their history.
+- Save status line under the progress bar: Guest hint ("Guest practice isn't saved. Pick a profile before you start to keep your work."), "Your answers will be saved to <name>'s history", "✓ Saved to <name>'s history", or a red "Couldn't save…" message; hidden while reviewing a finished sheet.
+- Stored only in this browser (`bead-bright-history-v1`); nothing is sent anywhere.
+- Service worker cache `bead-bright-v10-history`; adds `tests/history.cjs`.
+
+### Test results
+
+Ran every test in `tests/README.md` on Node v22.11.0 (Windows), on `cd412c1` before merging:
+
+| Check | Result |
+| --- | --- |
+| `node --check app.js` / `techniques.js` / `sw.js` / `pwa.js` | Pass |
+| `node tests/techniques.cjs` | Pass — 3,520 question sequences |
+| `node tests/interactive.cjs` | Pass |
+| `node tests/pwa-assets.cjs` | Pass |
+| `node tests/mobile-default-view.cjs` | Pass |
+| `node tests/profiles.cjs` | Pass |
+| `node tests/history.cjs` (new; includes regression checks for both follow-up fixes, confirmed failing without them) | Pass |
+| `node tests/ui.cjs` | Pass |
+
+Production checks in Chrome after deployment:
+
+| Check | Result |
+| --- | --- |
+| Production `practice.html`, `app.js`, `sw.js` identical to `cd412c1` | Pass |
+| `/sw.js` serves `bead-bright-v10-history` | Pass |
+| `/tests/` and `/tests/history.cjs` return 404 | Pass |
+| Guest: amber "Guest practice isn't saved…" status | Pass |
+| History button hidden for Guest | **Fail** — see Known issues |
+| Add profile with real clicks; status "Your answers will be saved to Test Kid A's history" | Pass |
+| Real typed answer creates one unfinished session; status turns green "✓ Saved to Test Kid A's history" | Pass |
+| Adding a second child starts a fresh sheet; each child's session holds only their own answers | Pass |
+| History list shows the child's session as ↻ Unfinished; resuming restores the typed answer, shows the "Resuming…" banner and keeps saving | Pass |
+| Completing and checking the sheet marks it ✓ Finished | Pass |
+| Opening a finished session: inputs disabled, status hidden, "Finished practice…" banner, Check does not change history | Pass |
+| "Start new practice" exits review with inputs enabled | Pass |
+| Deleting a profile deletes its history only | Pass |
+| "Practice without a profile" returns to Guest; other history kept | Pass |
+| History persists across a reload | Pass |
+
+The owner's existing production profile was backed up before testing and restored exactly afterwards (with no history, as before). Test profiles and sessions were removed.
+
+### Known issues
+
+- **History button shows for Guest.** The button is marked hidden with no active profile, but the `.profile-chip` style (`display:inline-flex`) overrides the browser's default hiding, so it is always visible. Tapping it as Guest opens an empty "No practice sessions yet" list. No data is affected. Simulated tests do not apply CSS, so they did not catch it. Likely fix: a one-line `#history-btn[hidden]{display:none}` rule.
+
+### Untested — spot-check manually
+
+- Real phone: History dialog, banner and status line at phone width.
+- Screen reader announcements of the save status.
+- Browser storage limits in practice (the failure message was tested with simulated full storage only).
