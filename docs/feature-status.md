@@ -6,6 +6,7 @@
 | Fxx | Operator fix and fun theme | Done |
 | polish-12 | Interactivity and polish pass | Done |
 | hotfix-4bugs | Fixes for 4 reported polish-12 bugs | Done |
+| landing-and-nav-polish | Landing page at `/`, practice tool at `/practice.html`, nav polish | Done |
 
 ## U00 — Practice technique guide
 
@@ -201,3 +202,56 @@ Browser checks, run by Claude in Chrome (desktop, 1920px window) on both the pre
 - Real mobile device at phone width (the Print check used an iframe, not a phone).
 - iPhone installed app upgrading from v5 to v6.
 - Real-device animation/sound feel and grid layout at other widths, as listed for polish-12.
+
+## landing-and-nav-polish — Landing page and nav polish
+
+**Status:** Done (2026-09-27)
+
+**Approval scope:** Preview and production. The owner checked the preview that includes the installed-app redirect (https://bead-bright-go6prjhg4-rafeekasharafs-projects.vercel.app) and approved it.
+
+**Commits** (fast-forwarded onto `main` from `7b27e4b`):
+
+- `049af91` — Nav polish (from `0005-nav-polish-and-landing-page.patch`): teal Previous/Next distinct from blue Check answers; icon-only nav buttons on mobile with text labels on desktop; centered, spaced-out Check/Show answers row.
+- `e7ea477` — Landing page (same patch file): marketing page at `/`; practice tool moved to `/practice.html`; manifest `start_url` set to `/practice.html`; service worker cache `bead-bright-v7-landing-page` precaches both pages and serves each navigation from its own cache entry; adds `tests/pwa-assets.cjs`.
+- `695b8b6` — Installed-app redirect: in standalone display mode, the landing page sends the visitor to `/practice.html` before rendering. Existing home-screen installs keep `start_url` `/` (iOS never refreshes it) and would otherwise open on the marketing page.
+
+**Deployment:**
+
+- Production: https://bead-bright.vercel.app/ (landing) and https://bead-bright.vercel.app/practice.html (tool)
+- Vercel deployment: https://bead-bright-jk82bsxho-rafeekasharafs-projects.vercel.app
+
+### Test results
+
+Ran every test in `tests/README.md` on Node v22.11.0 (Windows), on `695b8b6` before merging:
+
+| Check | Result |
+| --- | --- |
+| `node --check app.js` / `techniques.js` / `sw.js` / `pwa.js` | Pass |
+| `node tests/techniques.cjs` | Pass — 3,520 question sequences |
+| `node tests/interactive.cjs` (now loads `practice.html`) | Pass |
+| `node tests/pwa-assets.cjs` (new; includes the redirect check, confirmed failing without the redirect) | Pass |
+| `node tests/ui.cjs` (now loads `practice.html`) | Pass |
+
+Production checks after deployment:
+
+| Check | Result |
+| --- | --- |
+| Production `index.html`, `practice.html`, `app.js`, `sw.js`, `pwa.js`, `manifest.webmanifest` identical to `695b8b6` | Pass |
+| `/sw.js` serves `bead-bright-v7-landing-page` | Pass |
+| `/` and `/practice.html` return 200; `/tests/` and `/tests/pwa-assets.cjs` return 404 | Pass |
+| `/` shows the landing page in a browser (no redirect when not installed); all three "Start practicing" links go to `practice.html` | Pass (Chrome) |
+| Clicking the hero button opens the practice tool; "Ready for offline practice" shown | Pass (Chrome) |
+| Previous/Next teal (`#0f7a5f`), Check answers blue (`#2655df`) | Pass (Chrome) |
+| Desktop: nav buttons show icon and text; last question shows "✔ Finish" | Pass (Chrome) |
+| Mobile (390px): nav buttons icon-only (45px wide), labels visually hidden but kept for screen readers; Print sheet hidden | Pass (Chrome, same-origin iframe) |
+| Check/Show answers row centered with 38px top margin | Pass (Chrome) |
+| Landing page at 390px: full-width button, no horizontal scroll | Pass (Chrome, same-origin iframe) |
+
+**Real upgrade observed:** the Chrome profile had v6 installed. The first load of `/` after deploy was served by the v6 worker, which always returns its cached `index.html`, so it showed the old practice tool while v7 installed. On the next load the v6 cache was gone and `/` showed the landing page.
+
+### Untested — spot-check manually
+
+- The installed-app redirect on a real installed app (iPhone home screen and Android/desktop). Automated tests stub the display mode.
+- Offline navigation between the landing page and `/practice.html` on a real device.
+- Real phone at mobile width (mobile checks used an iframe).
+- Inside the installed app, the "beadbright" logo on the practice page links to `/`, which now redirects back to the practice page.
