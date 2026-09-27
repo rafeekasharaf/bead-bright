@@ -3,11 +3,36 @@
 (function (root) {
   'use strict';
   const levels = {
-    free: {name:'Unrestricted', help:'All addition and subtraction techniques. This is the original practice mode.'},
-    direct: {name:'Direct beads', help:'Move beads directly, without complements to 5 or 10. Addition-only sheets allow up to 5 rows; choose mixed practice for longer sheets.'},
-    five: {name:'Small friends (5)', help:'Direct moves and complements to 5, without carrying or borrowing. Every question includes a small-friend move. Addition-only sheets allow up to 9 rows.'},
-    ten: {name:'Big friends (10)', help:'Direct moves and complements to 10, without small-friend moves. Every question includes carrying or borrowing. Addition-only sheets allow up to 29 rows.'},
-    combined: {name:'Combined friends', help:'All techniques, with at least one nested 5-and-10 complement in every question.'}
+    free: {
+      name:'All techniques — Free practice',
+      help:'Practise any combination of direct moves, friends of 5, and friends of 10. No technique restrictions.',
+      example:'A sheet can include 2 + 2 (direct), 4 + 3 (friends of 5), and 8 + 4 (friends of 10). Follow the running total down each column.',
+      formula:'Choose a focused technique below when you want to practise one particular bead skill.'
+    },
+    direct: {
+      name:'Direct moves — No friend formulas',
+      help:'Add or remove available beads directly. No exchanges using 5 and no carrying or borrowing using 10. Addition-only sheets allow up to 5 rows; use mixed practice for longer sheets.',
+      example:'2 + 2 = 4. Start with two lower beads touching the bar. Move two more toward the bar. No exchange is needed.',
+      formula:'2 + 2 = 4'
+    },
+    five: {
+      name:'Small friends — Friends of 5',
+      help:'Exchange the five-bead when there are not enough lower beads to add or remove directly. Each question includes at least one friends-of-5 step. No carrying or borrowing. Addition-only sheets allow up to 9 rows.',
+      example:'4 + 3 = 7. All four lower beads are already in use. Since 3 + 2 = 5, add the five-bead and remove two lower beads. Friend pairs: 1 and 4; 2 and 3. For subtraction, 5 − 3 uses −5 +2.',
+      formula:'4 + 5 − 2 = 7'
+    },
+    ten: {
+      name:'Big friends — Friends of 10',
+      help:'Carry or borrow between place-value rods. Each question includes at least one friends-of-10 step, without a friends-of-5 exchange. Addition-only sheets allow up to 29 rows.',
+      example:'8 + 4 = 12. Since 4 + 6 = 10, add one ten on the next rod and remove six from the ones rod. Friend pairs: 1 and 9; 2 and 8; 3 and 7; 4 and 6; 5 and 5. For subtraction, 12 − 4 uses −10 +6.',
+      formula:'8 + 10 − 6 = 12'
+    },
+    combined: {
+      name:'Combined friends — 5 and 10 together',
+      help:'Practise steps where carrying or borrowing also needs a friends-of-5 exchange. Each question includes at least one combined step. Other steps may use direct moves or either friend technique.',
+      example:'5 + 6 = 11. Adding six uses friends of 10: +10 −4. Removing four from a rod showing five also needs friends of 5: −5 +1. Use both exchanges in the same step.',
+      formula:'5 + 10 − 5 + 1 = 11'
+    }
   };
   const randint = (min,max) => min + Math.floor(Math.random()*(max-min+1));
   const choose = list => list[randint(0,list.length-1)];
