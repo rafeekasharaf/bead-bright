@@ -57,4 +57,21 @@ assert.equal(visible.length,1);
 assert.equal(visible[0].id,'card-0');
 assert.equal($('focus-prev').disabled,true);
 
-console.log('Interactive checks passed: progress indicator, mini abacus render, one-at-a-time navigation, digit-length rebuild, view reset on new sheet.');
+// The mini abacus has enough rods for the largest total, so answers are never truncated.
+const rods=()=>$('mini-abacus').querySelectorAll('[data-kind="upper"]').length;
+const longest=()=>Math.max(...Array.from(document.querySelectorAll('.card')).map(card=>String(Array.from(card.querySelectorAll('.number')).reduce((sum,row)=>sum+(row.querySelector('.sign').textContent==='−'?-1:1)*Number(row.lastElementChild.textContent),0)).length));
+$('digits').children[0].dispatchEvent(new window.Event('click',{bubbles:true}));
+$('rows').value='20';
+submit();
+assert.ok(longest()>1,'20 one-digit rows should produce a multi-digit total');
+assert.equal(rods(),longest());
+$('a-0').value='12345';
+$('a-0').dispatchEvent(new window.Event('input',{bubbles:true}));
+assert.equal(rods(),5);
+assert.equal($('mini-abacus').querySelectorAll('.bead.active').length,1+2+3+4+1);
+
+// Cards must stay visible once a pop/shake animation replaces the entry animation.
+const css=document.querySelector('style').textContent;
+assert.doesNotMatch(css,/\.card\{[^}]*opacity:0/,'base .card rule must not hide cards');
+
+console.log('Interactive checks passed: progress indicator, mini abacus render and sizing, one-at-a-time navigation, digit-length rebuild, view reset on new sheet, visible checked cards.');

@@ -56,10 +56,13 @@ function updateProgress(){
 }
 
 // --- decorative mini abacus (non-graded, purely visual) ---
+// Enough rods for the largest total on the sheet (4 digits x 100 rows tops out at 999,900).
+const MAX_RODS=7;
 let abacusRods=[];
+function abacusSize(){return Math.max(digit,...questions.map(q=>String(q.total).length));}
 function buildAbacusBase(n){
   try{
-    n=Math.max(1,Math.min(4,n||1));
+    n=Math.max(1,Math.min(MAX_RODS,n||1));
     const svg=$('mini-abacus');if(!svg)return;
     const rodW=60,padTop=14,barY=46,h=100,totalW=n*rodW+40;
     svg.setAttribute('viewBox',`0 0 ${totalW} ${h}`);
@@ -85,8 +88,9 @@ function buildAbacusBase(n){
 }
 function updateAbacusBeads(raw){
   try{
-    const n=abacusRods.length;if(!n)return;
     const num=Math.max(0,Math.trunc(Math.abs(Number(raw))||0));
+    if(String(num).length>abacusRods.length)buildAbacusBase(String(num).length);
+    const n=abacusRods.length;if(!n)return;
     const digitsStr=String(num).padStart(n,'0').slice(-n);
     for(let i=0;i<n;i++){
       const d=Number(digitsStr[i])||0,rod=abacusRods[i];if(!rod)continue;
@@ -130,8 +134,8 @@ $('focus-next')?.addEventListener('click',()=>{
 });
 function randomInt(min,max){return min+Math.floor(Math.random()*(max-min+1));}
 function makeQuestion(digits,rows,mode,level){return AbacusTechniques.makeQuestion(digits,rows,mode,level);}
-function generate(){const rows=Number($('rows').value),count=Number($('count').value),mode=$('mode').value,level=$('level').value;if(!Number.isInteger(rows)||rows<2||rows>100||!Number.isInteger(count)||count<1||count>30)throw Error("Let's choose 2–100 rows and 1–30 questions, then we'll build your sheet.");questions=Array.from({length:count},()=>makeQuestion(digit,rows,mode,level));sheetLevel=level;revealed=false;$('reveal').textContent='Show answers';$('summary').textContent='';$('error').hidden=true;$('meta').textContent=`${AbacusTechniques.levels[level].name} · ${digit}-digit numbers · ${rows} rows · ${mode==='add'?'Addition':'Addition & subtraction'}`;$('questions').innerHTML=questions.map((q,i)=>`<article class="card" id="card-${i}" style="animation-delay:${Math.min(i,10)*45}ms"><h3>QUESTION ${String(i+1).padStart(2,'0')}</h3><div class="numbers">${q.values.map((v,j)=>`<div class="number"><span class="sign">${j===0?'':v<0?'−':'+'}</span><span>${Math.abs(v)}</span></div>`).join('')}</div><div class="answer"><label for="a-${i}">Answer for question ${i+1}</label><input id="a-${i}" inputmode="numeric" autocomplete="off" placeholder="?" aria-describedby="f-${i}"><p class="feedback" id="f-${i}"></p></div></article>`).join('');focusIndex=0;buildAbacusBase(digit);updateAbacusBeads(0);updateProgress();applyView();}
-$('digits').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;digit=Number(b.dataset.digit);for(const item of $('digits').children)item.setAttribute('aria-pressed',String(item===b));buildAbacusBase(digit);updateAbacusBeads(0);});
+function generate(){const rows=Number($('rows').value),count=Number($('count').value),mode=$('mode').value,level=$('level').value;if(!Number.isInteger(rows)||rows<2||rows>100||!Number.isInteger(count)||count<1||count>30)throw Error("Let's choose 2–100 rows and 1–30 questions, then we'll build your sheet.");questions=Array.from({length:count},()=>makeQuestion(digit,rows,mode,level));sheetLevel=level;revealed=false;$('reveal').textContent='Show answers';$('summary').textContent='';$('error').hidden=true;$('meta').textContent=`${AbacusTechniques.levels[level].name} · ${digit}-digit numbers · ${rows} rows · ${mode==='add'?'Addition':'Addition & subtraction'}`;$('questions').innerHTML=questions.map((q,i)=>`<article class="card" id="card-${i}" style="animation-delay:${Math.min(i,10)*45}ms"><h3>QUESTION ${String(i+1).padStart(2,'0')}</h3><div class="numbers">${q.values.map((v,j)=>`<div class="number"><span class="sign">${j===0?'':v<0?'−':'+'}</span><span>${Math.abs(v)}</span></div>`).join('')}</div><div class="answer"><label for="a-${i}">Answer for question ${i+1}</label><input id="a-${i}" inputmode="numeric" autocomplete="off" placeholder="?" aria-describedby="f-${i}"><p class="feedback" id="f-${i}"></p></div></article>`).join('');focusIndex=0;buildAbacusBase(abacusSize());updateAbacusBeads(0);updateProgress();applyView();}
+$('digits').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;digit=Number(b.dataset.digit);for(const item of $('digits').children)item.setAttribute('aria-pressed',String(item===b));buildAbacusBase(abacusSize());updateAbacusBeads(0);});
 function updateLevelHelp(){
   const technique=AbacusTechniques.levels[$('level').value];
   $('level-help').textContent=technique.help;
