@@ -11,7 +11,24 @@ node tests/interactive.cjs
 node tests/pwa-assets.cjs
 node tests/mobile-default-view.cjs
 node tests/profiles.cjs
+node tests/history.cjs
 ```
+
+`tests/history.cjs` uses the same Linkedom harness as `tests/profiles.cjs`
+(plus a `showModal`/`close` stub for both dialogs it uses) to cover
+per-profile practice history: guest mode saves nothing; the first typed
+answer (not merely generating a sheet) creates one session and further
+typing/checking updates that same session rather than duplicating it;
+"finished" only becomes true once every question has an answer; abandoning
+a sheet via New practice leaves the old session exactly as it was and does
+not record a fresh, untouched sheet as a session; resuming an unfinished
+session restores the exact questions and typed answers and continues
+updating that same session; opening a finished session is read-only
+(disabled inputs, no session mutation, no duplicate); the banner's "Start
+new practice" cleanly exits review/resume mode; deleting a profile deletes
+its history; and history rolls over at a 50-session-per-profile cap, oldest
+first — checked directly against the storage functions rather than by
+generating 51 sessions through the UI.
 
 `tests/profiles.cjs` uses the same Linkedom harness as `tests/ui.cjs`, plus an
 in-memory `localStorage` stub and a minimal `showModal`/`close` stub for the

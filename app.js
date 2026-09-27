@@ -142,6 +142,7 @@ function goToQuestion(i){
   focusIndex=i;applyView();
   const card=$(`card-${i}`);if(card)retrigger(card,'q-enter');
   const input=$(`a-${i}`);if(input)input.focus();
+  if(currentSessionId)syncSession();
 }
 function showResultsPanel(){
   try{
@@ -194,7 +195,22 @@ $('focus-next')?.addEventListener('click',()=>{
 });
 function randomInt(min,max){return min+Math.floor(Math.random()*(max-min+1));}
 function makeQuestion(digits,rows,mode,level){return AbacusTechniques.makeQuestion(digits,rows,mode,level);}
-function generate(){const rows=Number($('rows').value),count=Number($('count').value),mode=$('mode').value,level=$('level').value;if(!Number.isInteger(rows)||rows<2||rows>100||!Number.isInteger(count)||count<1||count>30)throw Error("Let's choose 2–100 rows and 1–30 questions, then we'll build your sheet.");questions=Array.from({length:count},()=>makeQuestion(digit,rows,mode,level));sheetLevel=level;revealed=false;$('reveal').textContent='Show answers';$('summary').textContent='';$('error').hidden=true;$('meta').textContent=`${AbacusTechniques.levels[level].name} · ${digit}-digit numbers · ${rows} rows · ${mode==='add'?'Addition':'Addition & subtraction'}`;$('questions').innerHTML=questions.map((q,i)=>`<article class="card" id="card-${i}" style="animation-delay:${Math.min(i,10)*45}ms"><h3>QUESTION ${String(i+1).padStart(2,'0')}</h3><div class="numbers">${q.values.map((v,j)=>`<div class="number"><span class="sign">${j===0?'':v<0?'−':'+'}</span><span>${Math.abs(v)}</span></div>`).join('')}</div><div class="answer"><label for="a-${i}">Answer for question ${i+1}</label><input id="a-${i}" inputmode="numeric" autocomplete="off" placeholder="?" aria-describedby="f-${i}"><p class="feedback" id="f-${i}"></p></div></article>`).join('');focusIndex=0;hasResults=false;buildAbacusBase(abacusSize());updateAbacusBeads(0);updateProgress();applyView();}
+function renderSheet(level,rows,mode){
+  sheetLevel=level;revealed=false;
+  $('reveal').textContent='Show answers';$('summary').textContent='';$('error').hidden=true;
+  $('meta').textContent=`${AbacusTechniques.levels[level].name} · ${digit}-digit numbers · ${rows} rows · ${mode==='add'?'Addition':'Addition & subtraction'}`;
+  $('questions').innerHTML=questions.map((q,i)=>`<article class="card" id="card-${i}" style="animation-delay:${Math.min(i,10)*45}ms"><h3>QUESTION ${String(i+1).padStart(2,'0')}</h3><div class="numbers">${q.values.map((v,j)=>`<div class="number"><span class="sign">${j===0?'':v<0?'−':'+'}</span><span>${Math.abs(v)}</span></div>`).join('')}</div><div class="answer"><label for="a-${i}">Answer for question ${i+1}</label><input id="a-${i}" inputmode="numeric" autocomplete="off" placeholder="?" aria-describedby="f-${i}"><p class="feedback" id="f-${i}"></p></div></article>`).join('');
+  focusIndex=0;hasResults=false;reviewOnly=false;
+  currentSessionId=null;currentSessionProfileId=null;
+  hideHistoryBanner();
+  buildAbacusBase(abacusSize());updateAbacusBeads(0);updateProgress();applyView();
+}
+function generate(){
+  const rows=Number($('rows').value),count=Number($('count').value),mode=$('mode').value,level=$('level').value;
+  if(!Number.isInteger(rows)||rows<2||rows>100||!Number.isInteger(count)||count<1||count>30)throw Error("Let's choose 2–100 rows and 1–30 questions, then we'll build your sheet.");
+  questions=Array.from({length:count},()=>makeQuestion(digit,rows,mode,level));
+  renderSheet(level,rows,mode);
+}
 $('digits').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;digit=Number(b.dataset.digit);for(const item of $('digits').children)item.setAttribute('aria-pressed',String(item===b));buildAbacusBase(abacusSize());updateAbacusBeads(0);});
 
 // --- local child profiles ---
@@ -213,6 +229,7 @@ function refreshProfileBar(){
   const profile=activeId?loadProfiles().find(p=>p.id===activeId):null;
   if(profile){avatarEl.textContent=profile.avatar;nameEl.textContent=profile.name;}
   else{avatarEl.textContent='🙂';nameEl.textContent='Practicing as Guest';}
+  const historyBtn=$('history-btn');if(historyBtn)historyBtn.hidden=!profile;
 }
 function showProfileError(msg){const el=$('profile-error');if(!el)return;el.textContent=msg;el.hidden=false;}
 function setSelectedAvatar(avatar){
@@ -317,6 +334,7 @@ $('profiles-list')?.addEventListener('click',e=>{
   if(e.target.closest('.profile-row-delete')){
     if(pendingDeleteId===id){
       saveProfiles(loadProfiles().filter(p=>p.id!==id));
+      deleteProfileHistory(id);
       if(getActiveProfileId()===id)setActiveProfileId(null);
       if(editingProfileId===id)resetProfileForm();
       pendingDeleteId=null;
@@ -341,6 +359,119 @@ $('profile-bar-btn')?.addEventListener('click',()=>{
   try{$('profiles-dialog').showModal();}catch(err){}
 });
 refreshProfileBar();
+
+// --- practice history and resume (per profile) ---
+const HISTORY_KEY='bead-bright-history-v1';
+const MAX_SESSIONS_PER_PROFILE=50;
+let currentSessionId=null, currentSessionProfileId=null, reviewOnly=false;
+function loadHistory(){try{const raw=localStorage.getItem(HISTORY_KEY),obj=raw?JSON.parse(raw):{};return (obj&&typeof obj==='object'&&!Array.isArray(obj))?obj:{};}catch(e){return {};}}
+function saveHistory(all){try{localStorage.setItem(HISTORY_KEY,JSON.stringify(all));}catch(e){}}
+function getProfileSessions(profileId){const all=loadHistory();return Array.isArray(all[profileId])?all[profileId]:[];}
+function upsertSession(profileId,session){
+  const all=loadHistory();
+  const list=Array.isArray(all[profileId])?all[profileId].slice():[];
+  const idx=list.findIndex(s=>s.id===session.id);
+  if(idx>=0)list[idx]=session;else list.push(session);
+  list.sort((a,b)=>new Date(b.startedAt)-new Date(a.startedAt));
+  all[profileId]=list.slice(0,MAX_SESSIONS_PER_PROFILE);
+  saveHistory(all);
+}
+function deleteProfileHistory(profileId){const all=loadHistory();delete all[profileId];saveHistory(all);}
+function ensureSession(){
+  if(reviewOnly||currentSessionId)return;
+  const activeId=getActiveProfileId();if(!activeId)return;
+  const now=new Date().toISOString();
+  const session={
+    id:'s'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),
+    startedAt:now,updatedAt:now,
+    settings:{digits:digit,rows:Number($('rows').value),count:questions.length,mode:$('mode').value,level:$('level').value},
+    questions:questions.map(q=>({values:q.values,total:q.total})),
+    answers:questions.map(()=>''),
+    focusIndex:0,finished:false
+  };
+  currentSessionId=session.id;currentSessionProfileId=activeId;
+  upsertSession(activeId,session);
+}
+function syncSession(finishedOverride){
+  if(reviewOnly||!currentSessionId||!currentSessionProfileId)return;
+  const list=getProfileSessions(currentSessionProfileId);
+  const session=list.find(s=>s.id===currentSessionId);if(!session)return;
+  session.answers=questions.map((q,i)=>{const el=$(`a-${i}`);return el?el.value:'';});
+  session.focusIndex=focusIndex;
+  session.updatedAt=new Date().toISOString();
+  if(finishedOverride!==undefined)session.finished=finishedOverride;
+  upsertSession(currentSessionProfileId,session);
+}
+function showHistoryBanner(text){const b=$('history-banner');if(!b)return;$('history-banner-text').textContent=text;b.hidden=false;}
+function hideHistoryBanner(){const b=$('history-banner');if(b)b.hidden=true;}
+$('history-banner-dismiss')?.addEventListener('click',()=>{try{generate();}catch(err){$('error').textContent=err.message;$('error').hidden=false;}});
+function formatDateTime(iso){
+  try{return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(iso));}
+  catch(e){return iso;}
+}
+function loadSessionIntoSheet(profileId,sessionId){
+  const session=getProfileSessions(profileId).find(s=>s.id===sessionId);if(!session)return;
+  $('level').value=session.settings.level;updateLevelHelp();
+  digit=session.settings.digits;
+  for(const item of $('digits').children)item.setAttribute('aria-pressed',String(Number(item.dataset.digit)===digit));
+  $('rows').value=session.settings.rows;$('count').value=session.settings.count;$('mode').value=session.settings.mode;
+  questions=session.questions.map(q=>({values:q.values.slice(),total:q.total}));
+  renderSheet(session.settings.level,session.settings.rows,session.settings.mode);
+  questions.forEach((q,i)=>{const el=$(`a-${i}`);if(el)el.value=session.answers[i]||'';});
+  updateProgress();
+  if(session.finished){
+    reviewOnly=true;
+    questions.forEach((q,i)=>{const el=$(`a-${i}`);if(el)el.disabled=true;});
+    check();
+    showHistoryBanner(`Finished practice · ${formatDateTime(session.startedAt)}`);
+  }else{
+    focusIndex=Math.min(session.focusIndex||0,questions.length-1);
+    applyView();
+    currentSessionId=session.id;currentSessionProfileId=profileId;
+    showHistoryBanner(`Resuming practice from ${formatDateTime(session.startedAt)}`);
+  }
+  try{$('history-dialog').close();}catch(err){}
+}
+function refreshHistoryList(){
+  const list=$('history-list');if(!list)return;
+  list.textContent='';
+  const activeId=getActiveProfileId();
+  const sessions=activeId?getProfileSessions(activeId):[];
+  if(!sessions.length){
+    const empty=document.createElement('p');empty.className='profiles-intro';
+    empty.textContent='No practice sessions yet. Start a sheet and it will show up here.';
+    list.appendChild(empty);return;
+  }
+  for(const s of sessions){
+    const row=document.createElement('button');
+    row.type='button';row.className='history-row';row.dataset.id=s.id;
+    const main=document.createElement('span');main.className='history-row-main';
+    const dateSpan=document.createElement('span');dateSpan.className='history-row-date';dateSpan.textContent=formatDateTime(s.startedAt);
+    const detailSpan=document.createElement('span');detailSpan.className='history-row-detail';
+    const levelName=(AbacusTechniques.levels[s.settings.level]||{}).name||s.settings.level;
+    detailSpan.textContent=`${levelName} · ${s.settings.digits}-digit · ${s.settings.rows} rows · ${s.settings.count} questions`;
+    main.append(dateSpan,detailSpan);
+    row.appendChild(main);
+    const status=document.createElement('span');
+    status.className='history-row-status '+(s.finished?'finished':'unfinished');
+    status.textContent=s.finished?'✓ Finished':'↻ Unfinished';
+    row.appendChild(status);
+    list.appendChild(row);
+  }
+}
+$('history-list')?.addEventListener('click',e=>{
+  const row=e.target.closest('.history-row');if(!row)return;
+  const activeId=getActiveProfileId();if(!activeId)return;
+  loadSessionIntoSheet(activeId,row.dataset.id);
+});
+$('history-btn')?.addEventListener('click',()=>{
+  const activeId=getActiveProfileId();
+  const profile=activeId?loadProfiles().find(p=>p.id===activeId):null;
+  $('history-subtitle').textContent=profile?`Sessions for ${profile.name}`:'';
+  refreshHistoryList();
+  try{$('history-dialog').showModal();}catch(err){}
+});
+
 function updateLevelHelp(){
   const technique=AbacusTechniques.levels[$('level').value];
   $('level-help').textContent=technique.help;
@@ -359,10 +490,10 @@ $('level').addEventListener('change',()=>{
 });
 updateLevelHelp();
 $('settings').addEventListener('submit',e=>{e.preventDefault();try{generate();}catch(err){$('error').textContent=err.message;$('error').hidden=false;}});
-function check(){let correct=0,answered=0;questions.forEach((q,i)=>{const value=$(`a-${i}`).value.trim(),valid=/^\d+$/.test(value),ok=valid&&Number(value)===q.total;if(value)answered++;if(ok)correct++;const card=$(`card-${i}`);card.className='card'+(value?(ok?' good':' retry'):'');if(value)retrigger(card,ok?'pop':'shake');const f=$(`f-${i}`);f.className='feedback '+(ok?'correct':'incorrect');f.textContent=revealed?`Answer: ${q.total}`:!value?'Try this one':ok?'Correct!':'Try again';});$('summary').textContent=correct===questions.length?`All ${correct} correct. Great work!`:`${correct} of ${questions.length} correct${answered<questions.length?` · ${questions.length-answered} to try`:''}`;if(answered>0){if(correct===questions.length){playTone([[523,0.12],[659,0.12],[784,0.18]]);celebrate();}else if(correct<answered){playTone([[300,0.14]]);}}updateProgress();applyView();if(answered>0&&viewMode==='focus')showResultsPanel();return {correct,total:questions.length};}
+function check(){let correct=0,answered=0;questions.forEach((q,i)=>{const value=$(`a-${i}`).value.trim(),valid=/^\d+$/.test(value),ok=valid&&Number(value)===q.total;if(value)answered++;if(ok)correct++;const card=$(`card-${i}`);card.className='card'+(value?(ok?' good':' retry'):'');if(value)retrigger(card,ok?'pop':'shake');const f=$(`f-${i}`);f.className='feedback '+(ok?'correct':'incorrect');f.textContent=revealed?`Answer: ${q.total}`:!value?'Try this one':ok?'Correct!':'Try again';});$('summary').textContent=correct===questions.length?`All ${correct} correct. Great work!`:`${correct} of ${questions.length} correct${answered<questions.length?` · ${questions.length-answered} to try`:''}`;if(!reviewOnly&&answered>0){if(correct===questions.length){playTone([[523,0.12],[659,0.12],[784,0.18]]);celebrate();}else if(correct<answered){playTone([[300,0.14]]);}}updateProgress();applyView();if(answered>0&&viewMode==='focus')showResultsPanel();if(!reviewOnly){ensureSession();syncSession(answered===questions.length);}return {correct,total:questions.length};}
 $('check').addEventListener('click',check);
 $('reveal').addEventListener('click',()=>{revealed=!revealed;$('reveal').textContent=revealed?'Hide answers':'Show answers';questions.forEach((q,i)=>{$(`f-${i}`).textContent=revealed?`Answer: ${q.total}`:'';$(`f-${i}`).className='feedback';});});
-$('questions').addEventListener('input',e=>{if(!e.target.id.startsWith('a-'))return;const i=Number(e.target.id.slice(2));$(`card-${i}`).className='card';if(!revealed)$(`f-${i}`).textContent='';$('summary').textContent='';applyView();updateAbacusBeads(e.target.value);updateProgress();if(e.target.value.trim())playTone([[880,0.045]],0.09);});
+$('questions').addEventListener('input',e=>{if(!e.target.id.startsWith('a-'))return;const i=Number(e.target.id.slice(2));$(`card-${i}`).className='card';if(!revealed)$(`f-${i}`).textContent='';$('summary').textContent='';applyView();updateAbacusBeads(e.target.value);updateProgress();if(e.target.value.trim())playTone([[880,0.045]],0.09);ensureSession();syncSession();});
 $('questions').addEventListener('focusin',e=>{if(e.target.matches&&e.target.matches('.answer input'))updateAbacusBeads(e.target.value);});
 $('questions').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();const next=Number(e.target.id.slice(2))+1;if(next<questions.length){if(viewMode==='focus')goToQuestion(next);else $(`a-${next}`).focus();}else check();}});
 $('print').addEventListener('click',()=>window.print());generate();
