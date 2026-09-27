@@ -227,7 +227,9 @@ $('timing-mode')?.addEventListener('change',()=>{
   const field=$('countdown-minutes-field');if(field)field.hidden=$('timing-mode').value!=='countdown';
 });
 let timerState={mode:'off',startedAt:null,accumulatedMs:0,running:false,limitMs:null,finished:false};
-let countdownTimeout=null, timesUp=false;
+let countdownTimeout=null, countdownWarnTimeout=null, timesUp=false;
+// A gentle heads-up, never a ticking clock: shown once a minute remains.
+const COUNTDOWN_WARN_MS=60000;
 function elapsedMs(){
   if(timerState.mode==='off')return 0;
   return timerState.accumulatedMs+(timerState.running?Date.now()-timerState.startedAt:0);
@@ -239,6 +241,7 @@ function formatDuration(ms){
 }
 function clearCountdownTimeout(){
   if(countdownTimeout){try{clearTimeout(countdownTimeout);}catch(e){}countdownTimeout=null;}
+  if(countdownWarnTimeout){try{clearTimeout(countdownWarnTimeout);}catch(e){}countdownWarnTimeout=null;}
 }
 function scheduleCountdownCheck(){
   clearCountdownTimeout();
@@ -246,10 +249,13 @@ function scheduleCountdownCheck(){
   if(timerState.mode!=='countdown'||!timerState.running||timerState.finished)return;
   const remaining=timerState.limitMs-elapsedMs();
   if(remaining<=0){triggerTimeUp();return;}
+  const untilWarn=remaining-COUNTDOWN_WARN_MS;
+  if(timerState.limitMs>COUNTDOWN_WARN_MS&&untilWarn>0){try{countdownWarnTimeout=setTimeout(updateTimingControl,untilWarn+50);}catch(e){}}
   try{countdownTimeout=setTimeout(()=>{if(elapsedMs()>=timerState.limitMs)triggerTimeUp();else scheduleCountdownCheck();},remaining+50);}catch(e){}
 }
 function checkCountdownExpiry(){
   if(timerState.mode==='countdown'&&timerState.running&&!timerState.finished&&elapsedMs()>=timerState.limitMs){triggerTimeUp();return true;}
+  if(timerState.mode==='countdown')updateTimingControl();
   return false;
 }
 function triggerTimeUp(){
@@ -263,11 +269,14 @@ function updateTimingControl(){
   if(timerState.mode==='off'){el.hidden=true;return;}
   el.hidden=false;
   const pauseBtn=$('timing-pause-btn');
+  const lastMinute=!reviewOnly&&!timerState.finished&&timerState.mode==='countdown'&&timerState.limitMs>COUNTDOWN_WARN_MS&&timerState.limitMs-elapsedMs()<=COUNTDOWN_WARN_MS;
+  el.classList.toggle('last-minute',lastMinute);
+  const setStatus=text=>{if($('timing-status').textContent!==text)$('timing-status').textContent=text;};
   if(reviewOnly||timerState.finished){
-    $('timing-status').textContent=`⏱ Finished in ${formatDuration(elapsedMs())}`;
+    setStatus(`⏱ Finished in ${formatDuration(elapsedMs())}`);
     if(pauseBtn)pauseBtn.hidden=true;
   }else{
-    $('timing-status').textContent=timerState.running?'⏱ Timing on':'⏱ Timing paused';
+    setStatus(lastMinute?(timerState.running?'⏳ 1 minute left':'⏳ 1 minute left · paused'):(timerState.running?'⏱ Timing on':'⏱ Timing paused'));
     if(pauseBtn){pauseBtn.hidden=false;pauseBtn.textContent=timerState.running?'Pause':'Resume';}
   }
 }
@@ -898,7 +907,9 @@ function check(){let correct=0,answered=0;questions.forEach((q,i)=>{const value=
     timerState.finished=true;clearCountdownTimeout();
     timeText=` You took ${formatDuration(timerState.accumulatedMs)}.`;
   }
-  $('summary').textContent=(timesUp?'⏰ Time\'s up! ':'')+(correct===questions.length?`All ${correct} correct. Great work!`:`${correct} of ${questions.length} correct${answered<questions.length?` · ${questions.length-answered} to try`:''}`)+timeText;
+  let resultText=correct===questions.length?`All ${correct} correct. Great work!`:`${correct} of ${questions.length} correct${answered<questions.length?` · ${questions.length-answered} to try`:''}`;
+  if(timeText&&!/[.!?]$/.test(resultText))resultText+='.';
+  $('summary').textContent=(timesUp?'⏰ Time\'s up! ':'')+resultText+timeText;
   if(!reviewOnly&&answered>0){if(correct===questions.length){playTone([[523,0.12],[659,0.12],[784,0.18]]);celebrate();}else if(correct<answered){playTone([[300,0.14]]);}}updateProgress();applyView();if(answered>0&&viewMode==='focus')showResultsPanel();updateTimingControl();if(!reviewOnly){ensureSession();syncSession((answered===questions.length)||timesUp);}return {correct,total:questions.length};}
 $('check').addEventListener('click',check);
 $('reveal').addEventListener('click',()=>{revealed=!revealed;$('reveal').textContent=revealed?'Hide answers':'Show answers';questions.forEach((q,i)=>{$(`f-${i}`).textContent=revealed?`Answer: ${q.total}`:'';$(`f-${i}`).className='feedback';});});

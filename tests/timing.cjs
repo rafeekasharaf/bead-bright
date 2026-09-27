@@ -209,6 +209,105 @@ async function testRealScheduledCountdown() {
   assert.match($('summary').textContent, /Time's up!/);
 }
 
-testRealScheduledCountdown().then(() => {
-  console.log('Timing checks passed: Off leaves untimed practice unaffected, Count up starts immediately and pause genuinely stops elapsed time from accruing, resuming after a simulated reload preserves only real practice time and starts paused, a countdown reaching its limit auto-finishes and locks the sheet even with unanswered questions (both via user interaction and via the real scheduled timer with no interaction at all), and history shows the recorded duration for timed sessions.');
+// The finish message puts a full stop before the time when the result does not
+// already end with one.
+{
+  const {document, context} = load();
+  const $ = $$(document);
+  setFakeNow(context, 7_000_000);
+  selectValue(document, 'timing-mode', 'countup');
+  setValue(document, 'count', '3');
+  document.getElementById('settings').dispatchEvent(Ev(document)('submit', {cancelable: true}));
+  setFakeNow(context, 7_003_000);
+  for (let i = 0; i < 3; i++) type(document, `a-${i}`, String(rowTotal(document, i) + (i === 0 ? 0 : 1)));
+  click(document, 'check');
+  assert.equal($('summary').textContent, '1 of 3 correct. You took 3s.');
+  setValue(document, 'count', '2');
+  document.getElementById('settings').dispatchEvent(Ev(document)('submit', {cancelable: true}));
+  setFakeNow(context, 7_005_000);
+  for (let i = 0; i < 2; i++) type(document, `a-${i}`, String(rowTotal(document, i)));
+  click(document, 'check');
+  assert.equal($('summary').textContent, 'All 2 correct. Great work! You took 2s.', 'no doubled punctuation');
+  // Time's up with blanks: the "to try" part also gets its full stop.
+  setFakeNow(context, 7_100_000);
+  selectValue(document, 'timing-mode', 'countdown');
+  setValue(document, 'countdown-minutes', '1');
+  setValue(document, 'count', '3');
+  document.getElementById('settings').dispatchEvent(Ev(document)('submit', {cancelable: true}));
+  type(document, 'a-0', String(rowTotal(document, 0)));
+  setFakeNow(context, 7_161_000);
+  vm.runInContext('checkCountdownExpiry()', context);
+  assert.equal($('summary').textContent, "⏰ Time's up! 1 of 3 correct · 2 to try. You took 1m 1s.");
+}
+
+// A countdown shows a gentle "1 minute left" note once a minute remains; never
+// for count-up or a 1-minute countdown, with a paused variant, cleared on finish.
+{
+  const {document, context} = load();
+  const $ = $$(document);
+  const status = () => $('timing-status').textContent;
+  const lastMinute = () => $('timing-control').classList.contains('last-minute');
+  setFakeNow(context, 8_000_000);
+  selectValue(document, 'timing-mode', 'countdown');
+  setValue(document, 'countdown-minutes', '3');
+  setValue(document, 'count', '2');
+  document.getElementById('settings').dispatchEvent(Ev(document)('submit', {cancelable: true}));
+  assert.equal(status(), '⏱ Timing on');
+  setFakeNow(context, 8_119_000); // 61s left
+  type(document, 'a-0', '1');
+  assert.equal(status(), '⏱ Timing on', 'not yet: more than a minute left');
+  assert.equal(lastMinute(), false);
+  setFakeNow(context, 8_121_000); // 59s left
+  type(document, 'a-0', '2');
+  assert.equal(status(), '⏳ 1 minute left');
+  assert.equal(lastMinute(), true);
+  assert.equal($('timing-status').getAttribute('aria-live'), 'polite', 'announced once to screen readers');
+  click(document, 'timing-pause-btn');
+  assert.equal(status(), '⏳ 1 minute left · paused');
+  click(document, 'timing-pause-btn');
+  assert.equal(status(), '⏳ 1 minute left');
+  type(document, 'a-1', '3');
+  click(document, 'check');
+  assert.match(status(), /^⏱ Finished in /);
+  assert.equal(lastMinute(), false, 'the note clears when the sheet is finished');
+
+  // A 1-minute countdown would show the note from the very start, so it never shows.
+  setFakeNow(context, 9_000_000);
+  setValue(document, 'countdown-minutes', '1');
+  document.getElementById('settings').dispatchEvent(Ev(document)('submit', {cancelable: true}));
+  setFakeNow(context, 9_030_000);
+  type(document, 'a-0', '1');
+  assert.equal(status(), '⏱ Timing on');
+  assert.equal(lastMinute(), false);
+
+  // Count up never shows it.
+  setFakeNow(context, 9_100_000);
+  selectValue(document, 'timing-mode', 'countup');
+  document.getElementById('settings').dispatchEvent(Ev(document)('submit', {cancelable: true}));
+  setFakeNow(context, 9_900_000);
+  type(document, 'a-0', '1');
+  assert.equal(status(), '⏱ Timing on');
+}
+
+// The note's own scheduled timer shows it with no interaction at all.
+async function testRealScheduledNote() {
+  const {document, context} = load();
+  const $ = $$(document);
+  setFakeNow(context, 10_000_000);
+  selectValue(document, 'timing-mode', 'countdown');
+  setValue(document, 'countdown-minutes', '2');
+  document.getElementById('settings').dispatchEvent(Ev(document)('submit', {cancelable: true}));
+  // Put the clock 20ms before the one-minute mark and reschedule, so the real
+  // warning timeout fires almost at once instead of after a real minute.
+  setFakeNow(context, 10_059_980);
+  vm.runInContext('scheduleCountdownCheck()', context);
+  assert.equal($('timing-status').textContent, '⏱ Timing on');
+  setFakeNow(context, 10_060_100);
+  await delay(120);
+  assert.equal($('timing-status').textContent, '⏳ 1 minute left', 'the scheduled note fires with no user interaction');
+  vm.runInContext('clearCountdownTimeout()', context);
+}
+
+testRealScheduledCountdown().then(testRealScheduledNote).then(() => {
+  console.log('Timing checks passed: full stop before the time, "1 minute left" note (scheduled and on interaction, paused variant, cleared on finish, never for count-up or 1-minute countdowns), Off leaves untimed practice unaffected, Count up starts immediately and pause genuinely stops elapsed time from accruing, resuming after a simulated reload preserves only real practice time and starts paused, a countdown reaching its limit auto-finishes and locks the sheet even with unanswered questions (both via user interaction and via the real scheduled timer with no interaction at all), and history shows the recorded duration for timed sessions.');
 }).catch(err => { console.error(err); process.exitCode = 1; });

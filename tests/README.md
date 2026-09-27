@@ -38,10 +38,14 @@ saved session after a simulated reload preserves only the real practice time
 to continue; a countdown reaching its limit auto-finishes and locks every
 input even when some questions are still blank, both via the opportunistic
 check on user interaction and via the countdown's own scheduled timer firing
-for real with no interaction at all; and a finished timed session's duration
-shows up in the history list. Elapsed time is checked by mocking `Date.now`
-inside the suite's own realm, not by waiting in real time, except for one
-short real `setTimeout` that exercises the actual scheduled check end to end.
+for real with no interaction at all; a finished timed session's duration
+shows up in the history list; the finish message puts a full stop before the
+time; and a countdown longer than a minute shows a "1 minute left" note once a
+minute remains (from its own scheduled timer or on interaction, with a paused
+variant, cleared on finish, never for count-up). Elapsed time is checked by
+mocking `Date.now` inside the suite's own realm, not by waiting in real time,
+except for two short real `setTimeout`s that exercise the scheduled checks end
+to end.
 
 `tests/history.cjs` uses the same Linkedom harness as `tests/profiles.cjs`
 (plus a `showModal`/`close` stub for both dialogs it uses) to cover
