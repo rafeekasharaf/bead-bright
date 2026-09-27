@@ -473,6 +473,7 @@ function refreshHistoryList(){
     list.appendChild(empty);return;
   }
   for(const s of sessions){
+    const item=document.createElement('div');item.className='history-item';
     const row=document.createElement('button');
     row.type='button';row.className='history-row';row.dataset.id=s.id;
     const main=document.createElement('span');main.className='history-row-main';
@@ -486,19 +487,64 @@ function refreshHistoryList(){
     status.className='history-row-status '+(s.finished?'finished':'unfinished');
     status.textContent=s.finished?'✓ Finished':'↻ Unfinished';
     row.appendChild(status);
-    list.appendChild(row);
+    const confirming=pendingHistoryDeleteId===s.id;
+    const del=document.createElement('button');
+    del.type='button';del.className='history-row-delete'+(confirming?' confirming':'');del.dataset.id=s.id;
+    del.textContent=confirming?'Confirm delete':'🗑️';
+    del.setAttribute('aria-label',`${confirming?'Confirm deleting':'Delete'} practice from ${formatDateTime(s.startedAt)}`);
+    item.append(row,del);
+    list.appendChild(item);
   }
 }
+// Deleting takes two taps, like deleting a profile, so a stray tap never loses history.
+let pendingHistoryDeleteId=null, pendingHistoryClear=false;
+function refreshHistoryClearButton(){
+  const b=$('history-clear');if(!b)return;
+  const activeId=getActiveProfileId(),p=activeId?loadProfiles().find(x=>x.id===activeId):null;
+  b.hidden=!p||!getProfileSessions(activeId).length;
+  b.classList.toggle('confirming',pendingHistoryClear);
+  b.textContent=pendingHistoryClear&&p?`Tap again to delete all of ${p.name}’s history`:'Delete all history';
+}
+// If the sheet on screen belonged to a deleted session, stop saving into it.
+function forgetDeletedSession(deletedIds){
+  if(currentSessionId&&deletedIds.includes(currentSessionId)){currentSessionId=null;currentSessionProfileId=null;updateSaveStatus();}
+}
 $('history-list')?.addEventListener('click',e=>{
-  const row=e.target.closest('.history-row');if(!row)return;
   const activeId=getActiveProfileId();if(!activeId)return;
+  const del=e.target.closest('.history-row-delete');
+  if(del){
+    pendingHistoryClear=false;
+    if(pendingHistoryDeleteId===del.dataset.id){
+      const all=loadHistory();
+      all[activeId]=(all[activeId]||[]).filter(s=>s.id!==del.dataset.id);
+      if(!all[activeId].length)delete all[activeId];
+      saveHistory(all);
+      forgetDeletedSession([del.dataset.id]);
+      pendingHistoryDeleteId=null;
+    }else pendingHistoryDeleteId=del.dataset.id;
+    refreshHistoryList();refreshHistoryClearButton();
+    return;
+  }
+  const row=e.target.closest('.history-row');if(!row)return;
+  pendingHistoryDeleteId=null;pendingHistoryClear=false;
   loadSessionIntoSheet(activeId,row.dataset.id);
+});
+$('history-clear')?.addEventListener('click',()=>{
+  const activeId=getActiveProfileId();if(!activeId)return;
+  pendingHistoryDeleteId=null;
+  if(pendingHistoryClear){
+    forgetDeletedSession(getProfileSessions(activeId).map(s=>s.id));
+    deleteProfileHistory(activeId);
+    pendingHistoryClear=false;
+  }else pendingHistoryClear=true;
+  refreshHistoryList();refreshHistoryClearButton();
 });
 $('history-btn')?.addEventListener('click',()=>{
   const activeId=getActiveProfileId();
   const profile=activeId?loadProfiles().find(p=>p.id===activeId):null;
   $('history-subtitle').textContent=profile?`Sessions for ${profile.name}`:'';
-  refreshHistoryList();
+  pendingHistoryDeleteId=null;pendingHistoryClear=false;
+  refreshHistoryList();refreshHistoryClearButton();
   try{$('history-dialog').showModal();}catch(err){}
 });
 

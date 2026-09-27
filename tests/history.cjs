@@ -53,7 +53,11 @@ function openHistory(document) {
 }
 
 function historyRows(document) {
-  return Array.from(document.getElementById('history-list').children).filter(el => el.classList.contains('history-row'));
+  return Array.from(document.getElementById('history-list').querySelectorAll('.history-row'));
+}
+
+function historyDeleteButtons(document) {
+  return Array.from(document.getElementById('history-list').querySelectorAll('.history-row-delete'));
 }
 
 // Guest mode: typing and checking answers never creates any history.
@@ -359,4 +363,80 @@ function historyRows(document) {
   assert.ok(css.includes('.profile-chip[hidden]{display:none}'), 'a hidden profile chip must not be displayed');
 }
 
-console.log('History checks passed: History button stays hidden for Guest, save status line for guest, pending, saved, failed, review and resume, switching child starts a fresh sheet and keeps answers separate per child, guest mode saves nothing, first answer creates one session and further typing updates it in place, finished status tracks whether every question was answered, abandoning a sheet leaves the old session untouched and does not record an untouched new one, resuming restores exact questions/answers and continues the same session, viewing a finished session is read-only and non-mutating, the banner dismiss action exits review/resume cleanly, deleting a profile deletes its history, and history rolls over at a 50-session cap.');
+// Deleting history from the History popup: one session at a time, or all of a
+// child's history, each needing a second tap to confirm.
+{
+  const store = {};
+  const {document} = load(store);
+  const $ = $$(document);
+  const tap = el => el.dispatchEvent(Ev(document)('click', {bubbles: true}));
+  const newSheet = () => $('settings').dispatchEvent(Ev(document)('submit', {cancelable: true}));
+  addProfile(document, 'Mia', 0);
+  addProfile(document, 'Leo', 1);
+  const ids = Object.fromEntries(JSON.parse(store['bead-bright-profiles-v1']).map(p => [p.name, p.id]));
+  const sessionsFor = name => (JSON.parse(store['bead-bright-history-v1'] || '{}')[ids[name]] || []);
+  const switchTo = name => {
+    click(document, 'profile-bar-btn');
+    tap(Array.from(document.querySelectorAll('.profile-row')).find(r => r.dataset.id === ids[name]).querySelector('.profile-row-select'));
+  };
+  type(document, 'a-0', '1');                    // Leo: one session
+  switchTo('Mia');
+  for (const answer of ['2', '3', '4']) { type(document, 'a-0', answer); newSheet(); }  // Mia: three sessions
+  assert.equal(sessionsFor('Mia').length, 3);
+  assert.equal(sessionsFor('Leo').length, 1);
+
+  openHistory(document);
+  assert.equal(historyRows(document).length, 3);
+  assert.equal($('history-clear').hidden, false, 'Delete all is offered when there is history');
+  assert.equal($('history-clear').textContent, 'Delete all history');
+
+  // One session: first tap only asks; second tap deletes exactly that one.
+  const target = historyDeleteButtons(document)[1], targetId = target.dataset.id;
+  tap(target);
+  assert.equal(sessionsFor('Mia').length, 3, 'first tap must not delete');
+  assert.equal(historyDeleteButtons(document)[1].textContent, 'Confirm delete');
+  assert.equal(historyDeleteButtons(document)[0].textContent, '🗑️', 'only the tapped row asks to confirm');
+  tap(historyDeleteButtons(document)[1]);
+  assert.equal(sessionsFor('Mia').length, 2);
+  assert.equal(sessionsFor('Mia').some(s => s.id === targetId), false, 'the confirmed session is gone');
+  assert.equal(historyRows(document).length, 2, 'the list refreshes');
+  assert.equal($('history-dialog').hasAttribute('open'), true, 'deleting keeps the popup open');
+
+  // A pending confirm is dropped when a different row is tapped or the popup is reopened.
+  tap(historyDeleteButtons(document)[0]);
+  tap(historyDeleteButtons(document)[1]);
+  assert.equal(sessionsFor('Mia').length, 2, 'tapping a different row only moves the confirm');
+  assert.deepEqual(historyDeleteButtons(document).map(b => b.textContent), ['🗑️', 'Confirm delete']);
+  $('history-dialog').close();
+  openHistory(document);
+  assert.deepEqual(historyDeleteButtons(document).map(b => b.textContent), ['🗑️', '🗑️'], 'reopening clears a pending confirm');
+
+  // Deleting the sheet currently on screen stops saving into it; typing starts a new session.
+  const onScreen = sessionsFor('Mia').find(s => s.answers[0] === '');
+  assert.equal(onScreen, undefined, 'the fresh sheet on screen has no session yet');
+  type(document, 'a-0', '9');
+  const currentId = sessionsFor('Mia').find(s => s.answers[0] === '9').id;
+  openHistory(document);
+  const currentDelete = historyDeleteButtons(document).find(b => b.dataset.id === currentId);
+  tap(currentDelete);
+  tap(historyDeleteButtons(document).find(b => b.dataset.id === currentId));
+  assert.equal(sessionsFor('Mia').some(s => s.id === currentId), false);
+  assert.equal($('save-status').textContent, 'Your answers will be saved to Mia’s history', 'status no longer claims the deleted sheet is saved');
+  $('history-dialog').close();
+  type(document, 'a-1', '8');
+  assert.equal(sessionsFor('Mia').filter(s => s.answers[1] === '8').length, 1, 'typing again saves as a new session');
+
+  // Delete all: first tap asks by name; second tap clears only this child.
+  openHistory(document);
+  click(document, 'history-clear');
+  assert.equal($('history-clear').textContent, 'Tap again to delete all of Mia’s history');
+  assert.ok(sessionsFor('Mia').length > 0, 'first tap must not delete');
+  click(document, 'history-clear');
+  assert.equal(sessionsFor('Mia').length, 0);
+  assert.equal(sessionsFor('Leo').length, 1, "another child's history is untouched");
+  assert.match($('history-list').textContent, /No practice sessions yet/);
+  assert.equal($('history-clear').hidden, true, 'Delete all is hidden once there is nothing to delete');
+  assert.equal(JSON.parse(store['bead-bright-profiles-v1']).length, 2, 'deleting history never deletes profiles');
+}
+
+console.log('History checks passed: deleting one session or all history with two-tap confirm, History button stays hidden for Guest, save status line for guest, pending, saved, failed, review and resume, switching child starts a fresh sheet and keeps answers separate per child, guest mode saves nothing, first answer creates one session and further typing updates it in place, finished status tracks whether every question was answered, abandoning a sheet leaves the old session untouched and does not record an untouched new one, resuming restores exact questions/answers and continues the same session, viewing a finished session is read-only and non-mutating, the banner dismiss action exits review/resume cleanly, deleting a profile deletes its history, and history rolls over at a 50-session cap.');
