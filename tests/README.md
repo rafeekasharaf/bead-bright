@@ -7,7 +7,13 @@ node --check app.js
 node --check techniques.js
 node --check sw.js
 node tests/techniques.cjs
+node tests/interactive.cjs
 ```
+
+`tests/interactive.cjs` uses the same Linkedom harness as `tests/ui.cjs` and covers
+the one-at-a-time practice view, the progress indicator, and the decorative
+mini-abacus render/rebuild — it does not simulate real animation, sound, or
+Web Audio playback.
 
 The arithmetic suite checks 3,520 generated sequences across techniques, digit
 lengths and modes. Its independent bead-inventory checks cover direct/no-carry

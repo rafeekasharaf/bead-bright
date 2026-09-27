@@ -67,10 +67,10 @@
     return level==='five'?Boolean(flags&1):level==='ten'?Boolean(flags&2):level==='combined'?Boolean(flags&4):true;
   }
   function validate(digits,rows,mode,level) {
-    if(!Number.isInteger(digits)||digits<1||digits>4||!Number.isInteger(rows)||rows<2||rows>100||!['add','mixed'].includes(mode)||!Object.hasOwn(levels,level)) throw Error('Choose 1–4 digits, 2–100 rows, and a valid practice level.');
-    if(mode==='add'&&level==='direct'&&rows>5) throw Error('Direct-bead addition allows up to 5 rows with this digit length. Use 5 or fewer rows, or choose Addition & subtraction.');
-    if(mode==='add'&&level==='ten'&&rows>29) throw Error('Big-friend addition without small friends allows up to 29 rows. Use 29 or fewer rows, mixed practice, or Combined friends.');
-    if(mode==='add'&&level==='five'&&rows>9) throw Error('Small-friend addition allows up to 9 rows without carrying. Use 9 or fewer rows, or choose Addition & subtraction.');
+    if(!Number.isInteger(digits)||digits<1||digits>4||!Number.isInteger(rows)||rows<2||rows>100||!['add','mixed'].includes(mode)||!Object.hasOwn(levels,level)) throw Error("Let's pick 1–4 digits, 2–100 rows, and a practice technique, and we'll make your sheet.");
+    if(mode==='add'&&level==='direct'&&rows>5) throw Error('Direct moves keep sheets short at this digit length — try 5 or fewer rows, or switch to Addition & subtraction for a longer sheet.');
+    if(mode==='add'&&level==='ten'&&rows>29) throw Error('Big friends alone top out at 29 rows here — try 29 or fewer rows, mixed practice, or Combined friends for a longer sheet.');
+    if(mode==='add'&&level==='five'&&rows>9) throw Error('Small friends alone top out at 9 rows here — try 9 or fewer rows, or switch to Addition & subtraction for a longer sheet.');
   }
   const tenRoom = new Map();
   function tenSteps(top) {
@@ -120,7 +120,7 @@
       }
       if(values.length===rows&&targeted(flags,level)) return {values,total};
     }
-    throw Error('Could not make a full sheet for these settings. Try New practice again or choose fewer rows.');
+    throw Error("We couldn't build a full sheet with these settings. Tap New practice to try again, or choose fewer rows.");
   }
   const api={levels,classify,allowed,targeted,validate,makeQuestion};
   if(typeof module!=='undefined'&&module.exports) module.exports=api;
