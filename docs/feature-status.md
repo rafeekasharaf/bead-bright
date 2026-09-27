@@ -8,6 +8,8 @@
 | hotfix-4bugs | Fixes for 4 reported polish-12 bugs | Done |
 | landing-and-nav-polish | Landing page at `/`, practice tool at `/practice.html`, nav polish | Done |
 | sheet-improvements | Mobile-default one-at-a-time, sound on by default, results panel | Done |
+| F01 | Question controls and saved presets | Not shipped — branch deleted before merge |
+| F04 | Local child profiles | Done |
 
 ## U00 — Practice technique guide
 
@@ -316,3 +318,68 @@ Note: the owner's Chrome had a saved "sound off" (`bead-bright-sound-on` = `0`) 
 - Screen reader announcement of the results panel (VoiceOver / TalkBack). Focus movement was verified; actual speech was not.
 - Real phone: one-at-a-time default, slide-in animation feel, confetti and flowers.
 - Sound on by default on a real iPhone (silent switch, first-tap audio unlock), and whether default-on sound suits classroom use.
+
+## F01 — Question controls and saved presets
+
+**Status:** Not shipped. The `f01-presets` branch was deleted locally and on GitHub on 2026-09-27 at the owner's request, before any merge. Production never served F01; `main` contains none of its commits. Last branch tip was `5b07738`.
+
+## F04 — Local child profiles
+
+**Status:** Done (2026-09-27)
+
+**Approval scope:** Preview and production. Claude checked the preview (https://bead-bright-n43al3fy9-rafeekasharafs-projects.vercel.app) in the owner's signed-in Chrome before merging.
+
+**Commit:** `012c9ca` — F04: local child profiles (from `0007-F04-profiles.patch`). Fast-forwarded onto `main` from `cadddf4`.
+
+**Deployment:**
+
+- Production: https://bead-bright.vercel.app/practice.html
+- Vercel deployment: https://bead-bright-fbc57fi7o-rafeekasharafs-projects.vercel.app
+
+### What changed
+
+- A profile button above the practice area ("🙂 Practicing as Guest · Manage", or the active child's avatar and nickname).
+- A Profiles dialog: add a profile (one of 10 animal avatars plus a nickname of up to 20 characters, both required; up to 8 profiles); a new profile becomes active immediately; switch profiles; edit a profile's name and avatar, with Cancel; delete with a two-tap confirm ("Confirm delete"); "Practice without a profile" returns to Guest without deleting anything.
+- Profiles are stored only in the browser's `localStorage` on that device (`bead-bright-profiles-v1`, `bead-bright-active-profile-v1`). Nothing is sent anywhere; names are inserted as plain text.
+- Profiles do not yet change anything else: the sheet, settings, sound and progress are the same for every profile.
+- Service worker cache `bead-bright-v9-profiles`; adds `tests/profiles.cjs`.
+
+### Test results
+
+Ran every test in `tests/README.md` on Node v22.11.0 (Windows), on `012c9ca` before merging:
+
+| Check | Result |
+| --- | --- |
+| `node --check app.js` / `techniques.js` / `sw.js` / `pwa.js` | Pass |
+| `node tests/techniques.cjs` | Pass — 3,520 question sequences |
+| `node tests/interactive.cjs` | Pass |
+| `node tests/pwa-assets.cjs` | Pass |
+| `node tests/mobile-default-view.cjs` | Pass |
+| `node tests/profiles.cjs` (new) | Pass |
+| `node tests/ui.cjs` | Pass |
+
+Browser checks in Chrome, run on both the preview and production:
+
+| Check | Preview | Production |
+| --- | --- | --- |
+| Profile bar shows "Practicing as Guest" with no profiles; real click opens the Profiles dialog | Pass | Pass |
+| Add with real clicks and typing (🦊 "Test Kid A"): saved, active immediately, bar updates | Pass | Pass |
+| Add a second profile; it becomes active | Pass | Pass |
+| Saving with no nickname shows "Type a nickname first." | Pass | Pass |
+| Switch to another profile: bar updates, dialog closes, both profiles kept | Pass | Pass |
+| Edit pre-fills the name and shows "Save changes"; Cancel discards changes | Pass | Pass |
+| Edit name and avatar saves in place (🐸 "Test Kid A2") | Pass | Pass |
+| Delete: first tap shows "Confirm delete" and removes nothing; second tap removes only that profile | Pass | Pass |
+| "Practice without a profile": bar shows Guest, dialog closes, remaining profile kept | Pass | Pass |
+| Profiles persist across a reload | Pass | Pass |
+| `/sw.js` serves `bead-bright-v9-profiles`; v8 replaced after one reload | — | Pass |
+| `/tests/` and `/tests/profiles.cjs` return 404 | — | Pass |
+| Production `practice.html`, `app.js`, `sw.js` identical to `012c9ca` | — | Pass |
+
+Test profiles were removed afterwards. The owner's existing profiles on the preview site were backed up before testing and restored exactly; production had none and was left with none.
+
+### Untested — spot-check manually
+
+- Real phone: dialog layout, avatar picker and nickname keyboard at phone width.
+- Screen reader behaviour in the Profiles dialog.
+- Profiles on an installed home-screen app (storage is per browser/app, so profiles made in the browser may not appear in the installed app).
