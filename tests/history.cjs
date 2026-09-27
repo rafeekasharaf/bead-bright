@@ -297,4 +297,55 @@ function historyRows(document) {
   assert.equal(Object.values(all).flat().some(sess => sess.answers.includes('33')), false, 'Guest answers are never saved');
 }
 
-console.log('History checks passed: switching child starts a fresh sheet and keeps answers separate per child, guest mode saves nothing, first answer creates one session and further typing updates it in place, finished status tracks whether every question was answered, abandoning a sheet leaves the old session untouched and does not record an untouched new one, resuming restores exact questions/answers and continues the same session, viewing a finished session is read-only and non-mutating, the banner dismiss action exits review/resume cleanly, deleting a profile deletes its history, and history rolls over at a 50-session cap.');
+// The save status line tells the child whether this sheet is being kept.
+{
+  const store = {};
+  const {document, context} = load(store);
+  const $ = $$(document);
+  const status = () => ({text: $('save-status').textContent, hidden: $('save-status').hidden, cls: $('save-status').className});
+  assert.equal(status().hidden, false);
+  assert.match(status().text, /Guest practice isn’t saved. Pick a profile before you start/);
+  assert.match(status().cls, /guest/);
+  type(document, 'a-0', '5');
+  assert.match(status().text, /Guest practice isn’t saved/, 'guest typing still is not saved');
+
+  addProfile(document, 'Mia', 0);
+  assert.equal(status().text, 'Your answers will be saved to Mia’s history', 'nothing typed yet on the fresh sheet');
+  type(document, 'a-0', '5');
+  assert.equal(status().text, '✓ Saved to Mia’s history');
+  assert.match(status().cls, /saved/);
+
+  // A failed write is reported instead of silently dropped, and clears once saving works again.
+  const realSetItem = context.localStorage.setItem;
+  context.localStorage.setItem = (k, v) => { if (k === 'bead-bright-history-v1') throw new Error('QuotaExceededError'); realSetItem(k, v); };
+  type(document, 'a-1', '6');
+  assert.equal(status().text, 'Couldn’t save to Mia’s history — this device’s storage may be full.');
+  assert.match(status().cls, /failed/);
+  context.localStorage.setItem = realSetItem;
+  type(document, 'a-1', '7');
+  assert.equal(status().text, '✓ Saved to Mia’s history');
+
+  // Finish the sheet, then open it from History: review mode shows no save status.
+  const n = document.querySelectorAll('.card').length;
+  for (let q = 0; q < n; q++) type(document, 'a-' + q, '1');
+  click(document, 'check');
+  openHistory(document);
+  historyRows(document)[0].dispatchEvent(Ev(document)('click', {bubbles: true}));
+  assert.equal(status().hidden, true, 'no save status while reviewing a finished sheet');
+
+  // Resuming an unfinished sheet shows it is being saved to that child.
+  click(document, 'history-banner-dismiss');
+  assert.equal(status().text, 'Your answers will be saved to Mia’s history');
+  type(document, 'a-0', '9');
+  click(document, 'history-banner-dismiss');
+  openHistory(document);
+  const unfinished = historyRows(document).find(r => /Unfinished/.test(r.textContent));
+  unfinished.dispatchEvent(Ev(document)('click', {bubbles: true}));
+  assert.equal(status().text, '✓ Saved to Mia’s history', 'a resumed sheet is saved to its child');
+
+  click(document, 'profile-bar-btn');
+  click(document, 'profile-none-btn');
+  assert.match(status().text, /Guest practice isn’t saved/, 'switching to Guest updates the status');
+}
+
+console.log('History checks passed: save status line for guest, pending, saved, failed, review and resume, switching child starts a fresh sheet and keeps answers separate per child, guest mode saves nothing, first answer creates one session and further typing updates it in place, finished status tracks whether every question was answered, abandoning a sheet leaves the old session untouched and does not record an untouched new one, resuming restores exact questions/answers and continues the same session, viewing a finished session is read-only and non-mutating, the banner dismiss action exits review/resume cleanly, deleting a profile deletes its history, and history rolls over at a 50-session cap.');

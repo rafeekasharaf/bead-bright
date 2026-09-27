@@ -26,7 +26,9 @@ session restores the exact questions and typed answers and continues
 updating that same session; opening a finished session is read-only
 (disabled inputs, no session mutation, no duplicate); the banner's "Start
 new practice" cleanly exits review/resume mode; deleting a profile deletes
-its history; switching to a different child (or Guest) starts a fresh sheet
+its history; the save status line shows the right message for Guest, a
+fresh sheet, a saved sheet, a failed save (simulated full storage), review
+and resume; switching to a different child (or Guest) starts a fresh sheet
 so each child's session holds only their own answers; and history rolls over
 at a 50-session-per-profile cap, oldest
 first — checked directly against the storage functions rather than by

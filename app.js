@@ -201,8 +201,8 @@ function renderSheet(level,rows,mode){
   $('meta').textContent=`${AbacusTechniques.levels[level].name} · ${digit}-digit numbers · ${rows} rows · ${mode==='add'?'Addition':'Addition & subtraction'}`;
   $('questions').innerHTML=questions.map((q,i)=>`<article class="card" id="card-${i}" style="animation-delay:${Math.min(i,10)*45}ms"><h3>QUESTION ${String(i+1).padStart(2,'0')}</h3><div class="numbers">${q.values.map((v,j)=>`<div class="number"><span class="sign">${j===0?'':v<0?'−':'+'}</span><span>${Math.abs(v)}</span></div>`).join('')}</div><div class="answer"><label for="a-${i}">Answer for question ${i+1}</label><input id="a-${i}" inputmode="numeric" autocomplete="off" placeholder="?" aria-describedby="f-${i}"><p class="feedback" id="f-${i}"></p></div></article>`).join('');
   focusIndex=0;hasResults=false;reviewOnly=false;
-  currentSessionId=null;currentSessionProfileId=null;
-  hideHistoryBanner();
+  currentSessionId=null;currentSessionProfileId=null;lastSaveFailed=false;
+  hideHistoryBanner();updateSaveStatus();
   buildAbacusBase(abacusSize());updateAbacusBeads(0);updateProgress();applyView();
 }
 function generate(){
@@ -239,6 +239,8 @@ function refreshProfileBar(){
   if(profile){avatarEl.textContent=profile.avatar;nameEl.textContent=profile.name;}
   else{avatarEl.textContent='🙂';nameEl.textContent='Practicing as Guest';}
   const historyBtn=$('history-btn');if(historyBtn)historyBtn.hidden=!profile;
+  // The first call runs before the history section has loaded; the first sheet sets the status then.
+  try{updateSaveStatus();}catch(e){}
 }
 function showProfileError(msg){const el=$('profile-error');if(!el)return;el.textContent=msg;el.hidden=false;}
 function setSelectedAvatar(avatar){
@@ -372,9 +374,25 @@ refreshProfileBar();
 // --- practice history and resume (per profile) ---
 const HISTORY_KEY='bead-bright-history-v1';
 const MAX_SESSIONS_PER_PROFILE=50;
-let currentSessionId=null, currentSessionProfileId=null, reviewOnly=false;
+let currentSessionId=null, currentSessionProfileId=null, reviewOnly=false, lastSaveFailed=false;
 function loadHistory(){try{const raw=localStorage.getItem(HISTORY_KEY),obj=raw?JSON.parse(raw):{};return (obj&&typeof obj==='object'&&!Array.isArray(obj))?obj:{};}catch(e){return {};}}
-function saveHistory(all){try{localStorage.setItem(HISTORY_KEY,JSON.stringify(all));}catch(e){}}
+function saveHistory(all){try{localStorage.setItem(HISTORY_KEY,JSON.stringify(all));return true;}catch(e){return false;}}
+// Tell the child (and grown-up) whether this sheet is being kept.
+function updateSaveStatus(){
+  const el=$('save-status');if(!el)return;
+  const id=getActiveProfileId(),p=id?loadProfiles().find(x=>x.id===id):null;
+  let text='',state='';
+  if(reviewOnly){}
+  else if(!p){text='Guest practice isn’t saved. Pick a profile before you start to keep your work.';state='guest';}
+  else if(currentSessionId&&currentSessionProfileId===id){
+    text=lastSaveFailed?`Couldn’t save to ${p.name}’s history — this device’s storage may be full.`:`✓ Saved to ${p.name}’s history`;
+    state=lastSaveFailed?'failed':'saved';
+  }
+  else{text=`Your answers will be saved to ${p.name}’s history`;state='pending';}
+  if(el.textContent!==text)el.textContent=text;
+  el.className='save-status'+(state?' '+state:'');
+  el.hidden=!text;
+}
 function getProfileSessions(profileId){const all=loadHistory();return Array.isArray(all[profileId])?all[profileId]:[];}
 function upsertSession(profileId,session){
   const all=loadHistory();
@@ -383,7 +401,7 @@ function upsertSession(profileId,session){
   if(idx>=0)list[idx]=session;else list.push(session);
   list.sort((a,b)=>new Date(b.startedAt)-new Date(a.startedAt));
   all[profileId]=list.slice(0,MAX_SESSIONS_PER_PROFILE);
-  saveHistory(all);
+  return saveHistory(all);
 }
 function deleteProfileHistory(profileId){const all=loadHistory();delete all[profileId];saveHistory(all);}
 function ensureSession(){
@@ -399,7 +417,8 @@ function ensureSession(){
     focusIndex:0,finished:false
   };
   currentSessionId=session.id;currentSessionProfileId=activeId;
-  upsertSession(activeId,session);
+  lastSaveFailed=!upsertSession(activeId,session);
+  updateSaveStatus();
 }
 function syncSession(finishedOverride){
   if(reviewOnly||!currentSessionId||!currentSessionProfileId)return;
@@ -409,7 +428,8 @@ function syncSession(finishedOverride){
   session.focusIndex=focusIndex;
   session.updatedAt=new Date().toISOString();
   if(finishedOverride!==undefined)session.finished=finishedOverride;
-  upsertSession(currentSessionProfileId,session);
+  lastSaveFailed=!upsertSession(currentSessionProfileId,session);
+  updateSaveStatus();
 }
 function showHistoryBanner(text){const b=$('history-banner');if(!b)return;$('history-banner-text').textContent=text;b.hidden=false;}
 function hideHistoryBanner(){const b=$('history-banner');if(b)b.hidden=true;}
@@ -439,6 +459,7 @@ function loadSessionIntoSheet(profileId,sessionId){
     currentSessionId=session.id;currentSessionProfileId=profileId;
     showHistoryBanner(`Resuming practice from ${formatDateTime(session.startedAt)}`);
   }
+  updateSaveStatus();
   try{$('history-dialog').close();}catch(err){}
 }
 function refreshHistoryList(){
