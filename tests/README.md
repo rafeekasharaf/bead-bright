@@ -14,6 +14,7 @@ node tests/profiles.cjs
 node tests/history.cjs
 node tests/pins.cjs
 node tests/timing.cjs
+node tests/retry.cjs
 ```
 
 `tests/pins.cjs` covers child and grown-up PINs: the built-in SHA-256 matches
@@ -46,6 +47,18 @@ variant, cleared on finish, never for count-up). Elapsed time is checked by
 mocking `Date.now` inside the suite's own realm, not by waiting in real time,
 except for two short real `setTimeout`s that exercise the scheduled checks end
 to end.
+
+`tests/retry.cjs` covers retrying mistakes: the retry button stays hidden
+until a sheet is actually finished (every question answered, or timed out)
+and hides again when nothing was missed; an eligible finish shows an accurate
+"Retry the N you missed" label; retrying reuses the exact original questions
+that were wrong or blank — proven by comparing each card's rendered numbers,
+not just its settings, so a coincidentally-matching freshly-generated
+question would fail this check — leaving them freshly unanswered and
+editable; a touched retry sheet gets its own history entry tagged with the
+session it retries and shows a "↩ Retry ·" badge in the history list; and
+retrying works identically when started from a reopened, read-only finished
+session (which has no live in-progress session to fall back on for the tag).
 
 `tests/history.cjs` uses the same Linkedom harness as `tests/profiles.cjs`
 (plus a `showModal`/`close` stub for both dialogs it uses) to cover

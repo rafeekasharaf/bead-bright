@@ -1,5 +1,8 @@
 'use strict';
 let digit=1, questions=[], revealed=false, sheetLevel="free";
+// Set only while viewing a finished session read-only (retry's source when
+// there is no live currentSessionId), and while building a retry sheet.
+let reviewingSessionId=null, retryOfSessionId=null;
 const $=id=>document.getElementById(id);
 const SOUND_KEY='bead-bright-sound-on';
 let soundOn=true, audioCtx=null;
@@ -191,6 +194,46 @@ $('results-new')?.addEventListener('click',()=>{
   const input=$('a-0');if(input)input.focus();
 });
 $('focus-results-btn')?.addEventListener('click',showResultsPanel);
+
+// --- retry mistakes: a new sheet built from just the wrong/blank questions ---
+function wrongOrBlankIndices(){
+  const idx=[];
+  questions.forEach((q,i)=>{
+    const el=$(`a-${i}`),val=el?el.value.trim():'';
+    const ok=/^\d+$/.test(val)&&Number(val)===q.total;
+    if(!ok)idx.push(i);
+  });
+  return idx;
+}
+function updateRetryButtons(finishedNow){
+  const wrongIdx=wrongOrBlankIndices();
+  const eligible=!!finishedNow&&wrongIdx.length>0;
+  const label=`Retry the ${wrongIdx.length} you missed`;
+  for(const id of ['results-retry','retry-mistakes-btn']){
+    const el=$(id);if(!el)continue;
+    el.hidden=!eligible;
+    if(eligible)el.textContent=label;
+  }
+}
+function retryMistakes(){
+  const idx=wrongOrBlankIndices();if(!idx.length)return;
+  const sourceId=currentSessionId||reviewingSessionId;
+  const level=$('level').value,rows=Number($('rows').value),mode=$('mode').value;
+  questions=idx.map(i=>({values:questions[i].values.slice(),total:questions[i].total}));
+  $('count').value=questions.length;
+  renderSheet(level,rows,mode);
+  retryOfSessionId=sourceId;
+  startFreshTiming();
+}
+$('results-retry')?.addEventListener('click',()=>{
+  hideResultsPanel();
+  retryMistakes();
+  const input=$('a-0');if(input)input.focus();
+});
+$('retry-mistakes-btn')?.addEventListener('click',()=>{
+  retryMistakes();
+  const input=$('a-0');if(input)input.focus();
+});
 $('view-toggle')?.addEventListener('click',()=>{
   viewMode=viewMode==='sheet'?'focus':'sheet';
   focusIndex=0;applyView();
@@ -209,6 +252,9 @@ function renderSheet(level,rows,mode){
   $('questions').innerHTML=questions.map((q,i)=>`<article class="card" id="card-${i}" style="animation-delay:${Math.min(i,10)*45}ms"><h3>QUESTION ${String(i+1).padStart(2,'0')}</h3><div class="numbers">${q.values.map((v,j)=>`<div class="number"><span class="sign">${j===0?'':v<0?'−':'+'}</span><span>${Math.abs(v)}</span></div>`).join('')}</div><div class="answer"><label for="a-${i}">Answer for question ${i+1}</label><input id="a-${i}" inputmode="numeric" autocomplete="off" placeholder="?" aria-describedby="f-${i}"><p class="feedback" id="f-${i}"></p></div></article>`).join('');
   focusIndex=0;hasResults=false;reviewOnly=false;
   currentSessionId=null;currentSessionProfileId=null;lastSaveFailed=false;
+  reviewingSessionId=null;retryOfSessionId=null;
+  if($('retry-mistakes-btn'))$('retry-mistakes-btn').hidden=true;
+  if($('results-retry'))$('results-retry').hidden=true;
   hideHistoryBanner();updateSaveStatus();
   resetTiming();
   buildAbacusBase(abacusSize());updateAbacusBeads(0);updateProgress();applyView();
@@ -613,6 +659,8 @@ function ensureSession(){
     focusIndex:0,finished:false,
     timing:{mode:timerState.mode,limitMs:timerState.limitMs,accumulatedMs:elapsedMs()}
   };
+  if(retryOfSessionId)session.retryOf=retryOfSessionId;
+  retryOfSessionId=null;
   currentSessionId=session.id;currentSessionProfileId=activeId;
   lastSaveFailed=!upsertSession(activeId,session);
   updateSaveStatus();
@@ -649,9 +697,11 @@ function loadSessionIntoSheet(profileId,sessionId){
   updateProgress();
   if(session.finished){
     reviewOnly=true;
+    reviewingSessionId=sessionId;
     timerState.finished=true;
     questions.forEach((q,i)=>{const el=$(`a-${i}`);if(el)el.disabled=true;});
     check();
+    updateRetryButtons(true); // a finished session is always eligible, even if check() couldn't tell (e.g. time's-up-with-blanks on reload)
     showHistoryBanner(`Finished practice · ${formatDateTime(session.startedAt)}`);
   }else{
     focusIndex=Math.min(session.focusIndex||0,questions.length-1);
@@ -680,7 +730,7 @@ function refreshHistoryList(){
     const dateSpan=document.createElement('span');dateSpan.className='history-row-date';dateSpan.textContent=formatDateTime(s.startedAt);
     const detailSpan=document.createElement('span');detailSpan.className='history-row-detail';
     const levelName=(AbacusTechniques.levels[s.settings.level]||{}).name||s.settings.level;
-    detailSpan.textContent=`${levelName} · ${s.settings.digits}-digit · ${s.settings.rows} rows · ${s.settings.count} questions`+(s.timing&&s.timing.mode!=='off'?` · ⏱ ${formatDuration(s.timing.accumulatedMs||0)}`:'');
+    detailSpan.textContent=(s.retryOf?'↩ Retry · ':'')+`${levelName} · ${s.settings.digits}-digit · ${s.settings.rows} rows · ${s.settings.count} questions`+(s.timing&&s.timing.mode!=='off'?` · ⏱ ${formatDuration(s.timing.accumulatedMs||0)}`:'');
     main.append(dateSpan,detailSpan);
     row.appendChild(main);
     const status=document.createElement('span');
@@ -911,7 +961,7 @@ function check(){let correct=0,answered=0;questions.forEach((q,i)=>{const value=
   let resultText=correct===questions.length?`All ${correct} correct. Great work!`:`${correct} of ${questions.length} correct${answered<questions.length?` · ${questions.length-answered} to try`:''}`;
   if(timeText&&!/[.!?]$/.test(resultText))resultText+='.';
   $('summary').textContent=(timesUp?'⏰ Time\'s up! ':'')+resultText+timeText;
-  if(!reviewOnly&&answered>0){if(correct===questions.length){playTone([[523,0.12],[659,0.12],[784,0.18]]);celebrate();}else if(correct<answered){playTone([[300,0.14]]);}}updateProgress();applyView();if(answered>0&&viewMode==='focus')showResultsPanel();updateTimingControl();if(!reviewOnly){ensureSession();syncSession((answered===questions.length)||timesUp);}return {correct,total:questions.length};}
+  if(!reviewOnly&&answered>0){if(correct===questions.length){playTone([[523,0.12],[659,0.12],[784,0.18]]);celebrate();}else if(correct<answered){playTone([[300,0.14]]);}}updateProgress();applyView();if(answered>0&&viewMode==='focus')showResultsPanel();updateTimingControl();updateRetryButtons(finishedNow);if(!reviewOnly){ensureSession();syncSession((answered===questions.length)||timesUp);}return {correct,total:questions.length};}
 $('check').addEventListener('click',check);
 $('reveal').addEventListener('click',()=>{revealed=!revealed;$('reveal').textContent=revealed?'Hide answers':'Show answers';questions.forEach((q,i)=>{$(`f-${i}`).textContent=revealed?`Answer: ${q.total}`:'';$(`f-${i}`).className='feedback';});});
 $('questions').addEventListener('input',e=>{if(!e.target.id.startsWith('a-'))return;if(checkCountdownExpiry())return;const i=Number(e.target.id.slice(2));$(`card-${i}`).className='card';if(!revealed)$(`f-${i}`).textContent='';$('summary').textContent='';applyView();updateAbacusBeads(e.target.value);updateProgress();if(e.target.value.trim())playTone([[880,0.045]],0.09);ensureSession();syncSession();});
